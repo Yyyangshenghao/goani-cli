@@ -1,5 +1,18 @@
 # 使用指南
 
+## 目录
+
+- [命令概览](#命令概览)
+- [配置播放器](#配置播放器)
+- [搜索动漫](#搜索动漫)
+- [播放动漫](#播放动漫)
+- [媒体源管理](#媒体源管理)
+- [更新程序](#更新程序)
+- [其他命令](#其他命令)
+- [配置文件](#配置文件)
+
+---
+
 ## 命令概览
 
 ```bash
@@ -11,7 +24,9 @@ goani <command> [arguments]
 | `search` | 搜索动漫 |
 | `play` | 搜索并播放动漫 |
 | `list` | 列出所有媒体源 |
+| `source` | 管理媒体源订阅 |
 | `config` | 配置播放器 |
+| `update` | 更新到最新版本 |
 | `version` | 显示版本信息 |
 
 ---
@@ -89,6 +104,57 @@ goani play 葬送的芙莉莲
 
 ---
 
+## 媒体源管理
+
+### 列出媒体源和订阅
+
+```bash
+goani source list
+```
+
+### 订阅新的媒体源
+
+```bash
+goani source sub <url> [名称]
+```
+
+示例：
+```bash
+goani source sub https://example.com/sources.json 我的订阅
+```
+
+### 取消订阅
+
+```bash
+goani source unsub <url>
+```
+
+### 刷新订阅
+
+从所有订阅地址重新获取最新的媒体源：
+
+```bash
+goani source refresh
+```
+
+### 重置为默认源
+
+```bash
+goani source reset
+```
+
+---
+
+## 更新程序
+
+自动检查并更新到最新版本：
+
+```bash
+goani update
+```
+
+---
+
 ## 其他命令
 
 ### 列出媒体源
@@ -110,6 +176,10 @@ goani version
 配置文件位置：
 - Windows: `%USERPROFILE%\.goani\config.json`
 - macOS/Linux: `~/.goani/config.json`
+
+媒体源缓存：
+- Windows: `%USERPROFILE%\.goani\sources_cache.json`
+- macOS/Linux: `~/.goani/sources_cache.json`
 
 ### 更换播放器
 
