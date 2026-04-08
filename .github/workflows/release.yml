@@ -62,15 +62,17 @@ jobs:
           ARCHIVE_NAME=goani-${{ matrix.goos }}-${{ matrix.goarch }}
           if [ "${{ matrix.goos }}" = "windows" ]; then
             zip ${ARCHIVE_NAME}.zip goani.exe
+            rm goani.exe
           else
             tar -czvf ${ARCHIVE_NAME}.tar.gz goani
+            rm goani
           fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: goani-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: dist/goani-*
+          path: dist/*
           retention-days: 1
 
   release:
