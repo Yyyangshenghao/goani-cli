@@ -4,7 +4,8 @@
 *.dll
 *.so
 *.dylib
-/kanfan
+/goani
+/bin/
 
 # Test binary
 *.test
@@ -21,3 +22,6 @@
 # OS
 .DS_Store
 Thumbs.db
+
+# Config (user specific)
+goani.json

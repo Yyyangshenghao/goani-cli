@@ -34,11 +34,36 @@ A command-line anime player for Chinese web sources, written in Go.
 
 ## 安装
 
+### 方式一：下载预编译二进制（推荐）
+
+从 [Releases](https://github.com/yshscpu/goani-cli/releases) 下载对应平台的二进制文件：
+
+| 平台 | 文件 |
+|------|------|
+| Windows (x64) | `goani-windows-amd64.zip` |
+| macOS (Intel) | `goani-darwin-amd64.tar.gz` |
+| macOS (Apple Silicon) | `goani-darwin-arm64.tar.gz` |
+| Linux (x64) | `goani-linux-amd64.tar.gz` |
+| Linux (ARM64) | `goani-linux-arm64.tar.gz` |
+
+下载后解压，将二进制文件放到 PATH 目录中。
+
+### 方式二：Go install
+
+需要 Go 1.22+：
+
 ```bash
 go install github.com/yshscpu/goani-cli/cmd/goani@latest
 ```
 
-或从 [Releases](https://github.com/yshscpu/goani-cli/releases) 下载预编译二进制文件。
+### 方式三：从源码构建
+
+```bash
+git clone https://github.com/yshscpu/goani-cli.git
+cd goani-cli
+make build
+# 二进制文件在 bin/ 目录
+```
 
 ## 使用
 

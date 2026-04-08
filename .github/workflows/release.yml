@@ -1,0 +1,72 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [windows, darwin, linux]
+        goarch: [amd64, arm64]
+        exclude:
+          - goos: windows
+            goarch: arm64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          BINARY_NAME=goani
+          if [ "$GOOS" = "windows" ]; then
+            BINARY_NAME=goani.exe
+          fi
+          go build -ldflags="-s -w" -o dist/${BINARY_NAME} ./cmd/goani
+
+      - name: Create archive
+        run: |
+          cd dist
+          ARCHIVE_NAME=goani-${{ matrix.goos }}-${{ matrix.goarch }}
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            zip -r ${ARCHIVE_NAME}.zip goani.exe
+          else
+            tar -czvf ${ARCHIVE_NAME}.tar.gz goani
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: goani-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: List files
+        run: ls -la dist/
+
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: dist/**/*
+          generate_release_notes: true
