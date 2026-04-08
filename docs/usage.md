@@ -23,7 +23,6 @@ goani <command> [arguments]
 |------|------|
 | `search` | 搜索动漫 |
 | `play` | 搜索并播放动漫 |
-| `list` | 列出所有媒体源 |
 | `source` | 管理媒体源订阅 |
 | `config` | 配置播放器 |
 | `update` | 更新到最新版本 |
@@ -156,12 +155,6 @@ goani update
 ---
 
 ## 其他命令
-
-### 列出媒体源
-
-```bash
-goani list
-```
 
 ### 查看版本
 
