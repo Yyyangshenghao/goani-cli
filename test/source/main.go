@@ -4,21 +4,20 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Yyyangshenghao/goani-cli/internal/source"
 	"github.com/Yyyangshenghao/goani-cli/internal/source/webselector"
 )
 
 func main() {
 	fmt.Println("=== goani-cli 核心功能测试 ===\n")
 
-	// 测试 1: 加载配置
-	fmt.Println("【测试 1】加载订阅源配置")
-	config, err := source.LoadConfig("mediaSourceJson/css1.json")
-	if err != nil {
-		fmt.Printf("❌ 失败: %v\n\n", err)
+	// 测试 1: 使用 SourceManager 加载源
+	fmt.Println("【测试 1】加载媒体源")
+	sm := webselector.NewTestSourceManager()
+	sources := sm.GetAll()
+	if len(sources) == 0 {
+		fmt.Println("❌ 失败: 媒体源为空\n")
 		os.Exit(1)
 	}
-	sources := config.ExportedMediaSourceDataList.MediaSources
 	fmt.Printf("✅ 成功: 加载 %d 个媒体源\n\n", len(sources))
 
 	// 测试 2: 搜索

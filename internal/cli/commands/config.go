@@ -37,7 +37,7 @@ func (c *ConfigCommand) Run(args []string) {
 	name := args[1]
 	path := args[2]
 
-	c.app.Config.SetPlayer(name, path)
+	c.app.PlayerConfig.SetPlayer(name, path)
 	if err := c.app.SaveConfig(); err != nil {
 		ui.Error("保存配置失败: %v", err)
 		os.Exit(1)

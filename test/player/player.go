@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Yyyangshenghao/goani-cli/internal/config"
 	"github.com/Yyyangshenghao/goani-cli/internal/player"
 )
 
@@ -13,7 +12,7 @@ func main() {
 
 	// 测试 1: 加载配置
 	fmt.Println("【测试 1】加载配置")
-	cfg, err := config.Load()
+	cfg, err := player.LoadConfig()
 	if err != nil {
 		fmt.Printf("❌ 失败: %v\n\n", err)
 		os.Exit(1)

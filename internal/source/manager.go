@@ -1,7 +1,6 @@
 package source
 
 import (
-	"embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,15 +11,15 @@ import (
 	"time"
 )
 
-//go:embed default_sources.json
-var defaultSourcesFS embed.FS
+// DefaultSourceURL 默认媒体源订阅地址
+const DefaultSourceURL = "https://sub.creamycake.org/v1/css1.json"
 
 // SourceManager 媒体源管理器
 type SourceManager struct {
-	sources    []MediaSource
+	sources       []MediaSource
 	subscriptions []Subscription
-	cachePath  string
-	mu         sync.RWMutex
+	cachePath     string
+	mu            sync.RWMutex
 }
 
 // Subscription 订阅配置
@@ -48,7 +47,7 @@ func NewSourceManager() *SourceManager {
 	return sm
 }
 
-// load 加载媒体源（缓存优先，无缓存则用默认）
+// load 加载媒体源（缓存优先，无缓存则订阅默认源）
 func (sm *SourceManager) load() {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
@@ -58,9 +57,8 @@ func (sm *SourceManager) load() {
 		return
 	}
 
-	// 2. 加载默认源
-	sm.sources = sm.loadDefaultSources()
-	sm.subscriptions = []Subscription{}
+	// 2. 订阅默认源
+	sm.subscribeDefault()
 }
 
 // loadCache 加载缓存的配置
@@ -80,19 +78,25 @@ func (sm *SourceManager) loadCache() bool {
 	return len(sm.sources) > 0
 }
 
-// loadDefaultSources 加载默认媒体源
-func (sm *SourceManager) loadDefaultSources() []MediaSource {
-	data, err := defaultSourcesFS.ReadFile("default_sources.json")
+// subscribeDefault 订阅默认源
+func (sm *SourceManager) subscribeDefault() {
+	sources, err := sm.fetchFromURL(DefaultSourceURL)
 	if err != nil {
-		return nil
+		// 如果获取失败，保持空
+		sm.sources = []MediaSource{}
+		sm.subscriptions = []Subscription{}
+		return
 	}
 
-	var cfg Config
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil
+	sm.sources = sources
+	sm.subscriptions = []Subscription{
+		{
+			URL:       DefaultSourceURL,
+			Name:      "默认源",
+			UpdatedAt: time.Now().Format("2006-01-02 15:04:05"),
+		},
 	}
-
-	return cfg.ExportedMediaSourceDataList.MediaSources
+	sm.saveCache()
 }
 
 // saveCache 保存缓存
@@ -202,7 +206,7 @@ func (sm *SourceManager) Unsubscribe(url string) error {
 	}
 
 	// 重新加载：默认源 + 剩余订阅
-	sm.sources = sm.loadDefaultSources()
+	sm.sources = []MediaSource{}
 	for _, sub := range sm.subscriptions {
 		sources, _ := sm.fetchFromURL(sub.URL)
 		sm.sources = append(sm.sources, sources...)
@@ -221,7 +225,7 @@ func (sm *SourceManager) Refresh() error {
 	}
 
 	// 重新获取所有订阅
-	sm.sources = sm.loadDefaultSources()
+	sm.sources = []MediaSource{}
 	for i := range sm.subscriptions {
 		sources, err := sm.fetchFromURL(sm.subscriptions[i].URL)
 		if err != nil {
@@ -239,12 +243,11 @@ func (sm *SourceManager) Reset() error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	sm.sources = sm.loadDefaultSources()
-	sm.subscriptions = []Subscription{}
-
 	// 删除缓存文件
 	os.Remove(sm.cachePath)
 
+	// 重新订阅默认源
+	sm.subscribeDefault()
 	return nil
 }
 

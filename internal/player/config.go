@@ -1,4 +1,4 @@
-package config
+package player
 
 import (
 	"encoding/json"
@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 )
 
-// Config 应用配置
+// Config 播放器配置
 type Config struct {
 	PlayerName string `json:"playerName"`
 	PlayerPath string `json:"playerPath"`
@@ -22,12 +22,6 @@ func DefaultConfig() *Config {
 
 // GetConfigPath 获取配置文件路径
 func GetConfigPath() (string, error) {
-	// 优先使用项目目录下的配置
-	if _, err := os.Stat("goani.json"); err == nil {
-		return "goani.json", nil
-	}
-
-	// 否则使用用户目录
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
@@ -39,8 +33,8 @@ func GetConfigPath() (string, error) {
 	return filepath.Join(configDir, "config.json"), nil
 }
 
-// Load 加载配置
-func Load() (*Config, error) {
+// LoadConfig 加载配置
+func LoadConfig() (*Config, error) {
 	path, err := GetConfigPath()
 	if err != nil {
 		return DefaultConfig(), nil
