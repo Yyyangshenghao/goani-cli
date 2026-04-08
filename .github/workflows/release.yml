@@ -14,10 +14,16 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        goos: [windows, darwin, linux]
-        goarch: [amd64, arm64]
-        exclude:
+        include:
           - goos: windows
+            goarch: amd64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: linux
+            goarch: amd64
+          - goos: linux
             goarch: arm64
 
     steps:
@@ -44,29 +50,34 @@ jobs:
           cd dist
           ARCHIVE_NAME=goani-${{ matrix.goos }}-${{ matrix.goarch }}
           if [ "${{ matrix.goos }}" = "windows" ]; then
-            zip -r ${ARCHIVE_NAME}.zip goani.exe
+            zip ${ARCHIVE_NAME}.zip goani.exe
           else
             tar -czvf ${ARCHIVE_NAME}.tar.gz goani
           fi
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
           name: goani-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: dist/*
+          path: dist/goani-*
+          retention-days: 1
 
   release:
     name: Create Release
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
         with:
           path: dist
+          merge-multiple: true
 
       - name: List files
         run: ls -la dist/
 
-      - uses: softprops/action-gh-release@v1
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
         with:
-          files: dist/**/*
+          files: dist/*
           generate_release_notes: true
