@@ -1,4 +1,4 @@
-module github.com/yshscpu/goani-cli
+module github.com/Yyyangshenghao/goani-cli
 
 go 1.26.2
 

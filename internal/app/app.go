@@ -1,10 +1,10 @@
 package app
 
 import (
-	"github.com/yshscpu/goani-cli/internal/config"
-	"github.com/yshscpu/goani-cli/internal/player"
-	"github.com/yshscpu/goani-cli/internal/source"
-	"github.com/yshscpu/goani-cli/internal/source/webselector"
+	"github.com/Yyyangshenghao/goani-cli/internal/config"
+	"github.com/Yyyangshenghao/goani-cli/internal/player"
+	"github.com/Yyyangshenghao/goani-cli/internal/source"
+	"github.com/Yyyangshenghao/goani-cli/internal/source/webselector"
 )
 
 // App 应用核心，管理全局资源和配置

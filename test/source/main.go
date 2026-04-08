@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/yshscpu/goani-cli/internal/source"
-	"github.com/yshscpu/goani-cli/internal/source/webselector"
+	"github.com/Yyyangshenghao/goani-cli/internal/source"
+	"github.com/Yyyangshenghao/goani-cli/internal/source/webselector"
 )
 
 func main() {

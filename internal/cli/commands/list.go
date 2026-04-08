@@ -3,8 +3,8 @@ package commands
 import (
 	"fmt"
 
-	"github.com/yshscpu/goani-cli/internal/app"
-	"github.com/yshscpu/goani-cli/internal/ui"
+	"github.com/Yyyangshenghao/goani-cli/internal/app"
+	"github.com/Yyyangshenghao/goani-cli/internal/ui"
 )
 
 func init() {

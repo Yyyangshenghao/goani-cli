@@ -33,6 +33,13 @@ jobs:
         with:
           go-version: '1.22'
 
+      - name: Get version info
+        id: version
+        run: |
+          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          echo "GIT_COMMIT=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "BUILD_DATE=$(date -u '+%Y-%m-%d_%H:%M:%S')" >> $GITHUB_OUTPUT
+
       - name: Build
         env:
           GOOS: ${{ matrix.goos }}
@@ -43,7 +50,11 @@ jobs:
           if [ "$GOOS" = "windows" ]; then
             BINARY_NAME=goani.exe
           fi
-          go build -ldflags="-s -w" -o dist/${BINARY_NAME} ./cmd/goani
+          go build -ldflags="-s -w \
+            -X github.com/Yyyangshenghao/goani-cli/internal/version.Version=${{ steps.version.outputs.VERSION }} \
+            -X github.com/Yyyangshenghao/goani-cli/internal/version.GitCommit=${{ steps.version.outputs.GIT_COMMIT }} \
+            -X github.com/Yyyangshenghao/goani-cli/internal/version.BuildDate=${{ steps.version.outputs.BUILD_DATE }}" \
+            -o dist/${BINARY_NAME} ./cmd/goani
 
       - name: Create archive
         run: |

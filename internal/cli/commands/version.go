@@ -1,11 +1,15 @@
 package commands
 
-import "fmt"
+import (
+	"github.com/Yyyangshenghao/goani-cli/internal/version"
+)
+
+func init() {
+	Register(&VersionCommand{})
+}
 
 // VersionCommand 版本命令
-type VersionCommand struct {
-	version string
-}
+type VersionCommand struct{}
 
 // Name 返回命令名称
 func (c *VersionCommand) Name() string {
@@ -14,15 +18,10 @@ func (c *VersionCommand) Name() string {
 
 // Run 执行命令
 func (c *VersionCommand) Run(args []string) {
-	fmt.Printf("goani v%s\n", c.version)
+	print(version.Info())
 }
 
 // Usage 返回使用说明
 func (c *VersionCommand) Usage() string {
 	return "用法: goani version"
-}
-
-// SetVersion 设置版本号（需要在 main 中调用）
-func SetVersion(v string) {
-	Register(&VersionCommand{version: v})
 }

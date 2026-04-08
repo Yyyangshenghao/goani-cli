@@ -4,19 +4,14 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/yshscpu/goani-cli/internal/cli/commands"
+	"github.com/Yyyangshenghao/goani-cli/internal/cli/commands"
 
 	// 导入 commands 包以触发 init() 自动注册
-	_ "github.com/yshscpu/goani-cli/internal/cli/commands"
+	_ "github.com/Yyyangshenghao/goani-cli/internal/cli/commands"
 )
-
-var version = "0.1.0"
 
 // Run CLI 入口
 func Run() {
-	// 设置版本号
-	commands.SetVersion(version)
-
 	// 获取所有已注册的命令
 	cmds := commands.All()
 

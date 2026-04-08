@@ -1,8 +1,14 @@
 .PHONY: build clean test run install
 
 BINARY_NAME=goani
-VERSION?=0.1.0
-LDFLAGS=-ldflags "-s -w -X main.version=$(VERSION)"
+VERSION?=dev
+GIT_COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_DATE=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
+
+LDFLAGS=-ldflags "-s -w \
+	-X github.com/Yyyangshenghao/goani-cli/internal/version.Version=$(VERSION) \
+	-X github.com/Yyyangshenghao/goani-cli/internal/version.GitCommit=$(GIT_COMMIT) \
+	-X github.com/Yyyangshenghao/goani-cli/internal/version.BuildDate=$(BUILD_DATE)"
 
 # 默认构建当前平台
 build:
@@ -27,7 +33,7 @@ run:
 
 # 安装到 GOPATH
 install:
-	go install ./cmd/goani
+	go install $(LDFLAGS) ./cmd/goani
 
 # 清理
 clean:

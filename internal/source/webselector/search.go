@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/yshscpu/goani-cli/internal/source"
+	"github.com/Yyyangshenghao/goani-cli/internal/source"
 )
 
 // Search 搜索动漫

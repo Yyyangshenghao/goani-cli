@@ -3,7 +3,7 @@ package webselector
 import (
 	"net/http"
 
-	"github.com/yshscpu/goani-cli/internal/source"
+	"github.com/Yyyangshenghao/goani-cli/internal/source"
 )
 
 // WebSelectorSource 基于 CSS 选择器的媒体源实现

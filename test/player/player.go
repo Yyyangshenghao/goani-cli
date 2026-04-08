@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/yshscpu/goani-cli/internal/config"
-	"github.com/yshscpu/goani-cli/internal/player"
+	"github.com/Yyyangshenghao/goani-cli/internal/config"
+	"github.com/Yyyangshenghao/goani-cli/internal/player"
 )
 
 func main() {
