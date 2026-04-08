@@ -5,47 +5,54 @@ import (
 	"os"
 
 	"github.com/yshscpu/goani-cli/internal/cli/commands"
+
+	// 导入 commands 包以触发 init() 自动注册
+	_ "github.com/yshscpu/goani-cli/internal/cli/commands"
 )
 
 var version = "0.1.0"
 
 // Run CLI 入口
 func Run() {
+	// 设置版本号
+	commands.SetVersion(version)
+
+	// 获取所有已注册的命令
+	cmds := commands.All()
+
 	if len(os.Args) < 2 {
-		printUsage()
+		printUsage(cmds)
 		os.Exit(1)
 	}
 
-	cmd := os.Args[1]
+	cmdName := os.Args[1]
 	args := os.Args[2:]
 
-	switch cmd {
-	case "search":
-		commands.Search(args)
-	case "play":
-		commands.Play(args)
-	case "config":
-		commands.Config(args)
-	case "list":
-		commands.List()
-	case "version", "-v", "--version":
-		fmt.Printf("goani v%s\n", version)
-	default:
-		fmt.Printf("未知命令: %s\n", cmd)
-		printUsage()
+	// 支持简写
+	if cmdName == "-v" || cmdName == "--version" {
+		cmdName = "version"
+	}
+
+	cmd, exists := cmds[cmdName]
+	if !exists {
+		fmt.Printf("未知命令: %s\n", cmdName)
+		printUsage(cmds)
 		os.Exit(1)
 	}
+
+	cmd.Run(args)
 }
 
-func printUsage() {
+func printUsage(cmds map[string]commands.Command) {
 	fmt.Println("goani - 命令行动漫播放器")
 	fmt.Println()
 	fmt.Println("用法:")
-	fmt.Println("  goani search <keyword>             搜索动漫")
-	fmt.Println("  goani play <keyword>               搜索并播放")
-	fmt.Println("  goani config player <name> <path>  配置播放器")
-	fmt.Println("  goani list                         列出媒体源")
-	fmt.Println("  goani version                      显示版本")
+	fmt.Println("  goani <command> [arguments]")
+	fmt.Println()
+	fmt.Println("可用命令:")
+	for name, cmd := range cmds {
+		fmt.Printf("  %-10s %s\n", name, cmd.Usage())
+	}
 	fmt.Println()
 	fmt.Println("示例:")
 	fmt.Println("  goani search 葬送的芙莉莲")
