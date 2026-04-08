@@ -33,7 +33,7 @@
 
 ### 方式二：Go install
 
-需要先安装 Go 1.23+：
+需要先安装 Go 1.22+：
 
 ```powershell
 go install github.com/Yyyangshenghao/goani-cli/cmd/goani@latest
