@@ -16,6 +16,11 @@ func (c *VersionCommand) Name() string {
 	return "version"
 }
 
+// ShortDesc 返回简短描述
+func (c *VersionCommand) ShortDesc() string {
+	return "显示版本信息"
+}
+
 // Run 执行命令
 func (c *VersionCommand) Run(args []string) {
 	print(version.Info())

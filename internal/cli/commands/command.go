@@ -6,6 +6,8 @@ type Command interface {
 	Name() string
 	// Run 执行命令
 	Run(args []string)
-	// Usage 返回使用说明
+	// Usage 返回详细使用说明
 	Usage() string
+	// ShortDesc 返回简短描述（用于帮助列表）
+	ShortDesc() string
 }

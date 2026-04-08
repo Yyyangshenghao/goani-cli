@@ -21,11 +21,17 @@ func (c *ListCommand) Name() string {
 	return "list"
 }
 
+// ShortDesc 返回简短描述
+func (c *ListCommand) ShortDesc() string {
+	return "列出所有媒体源"
+}
+
 // Run 执行命令
 func (c *ListCommand) Run(args []string) {
-	ui.Info("共 %d 个媒体源", len(c.app.Sources))
+	sources := c.app.SourceManager.GetAll()
+	ui.Info("共 %d 个媒体源", len(sources))
 	fmt.Println()
-	for i, s := range c.app.Sources {
+	for i, s := range sources {
 		fmt.Printf("  %d. %s\n", i+1, s.Arguments.Name)
 	}
 }

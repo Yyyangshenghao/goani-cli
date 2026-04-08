@@ -22,6 +22,11 @@ func (c *PlayCommand) Name() string {
 	return "play"
 }
 
+// ShortDesc 返回简短描述
+func (c *PlayCommand) ShortDesc() string {
+	return "搜索并播放动漫"
+}
+
 // Run 执行命令
 func (c *PlayCommand) Run(args []string) {
 	if len(args) < 1 {

@@ -9,8 +9,8 @@ import (
 
 // App 应用核心，管理全局资源和配置
 type App struct {
-	Config  *config.Config
-	Sources []source.MediaSource
+	Config        *config.Config
+	SourceManager *source.SourceManager
 }
 
 // New 创建应用实例
@@ -20,28 +20,33 @@ func New() *App {
 		cfg = config.DefaultConfig()
 	}
 
-	srcConfig, err := source.LoadConfig("mediaSourceJson/css1.json")
-	if err != nil {
-		return &App{Config: cfg, Sources: nil}
-	}
-
 	return &App{
-		Config:  cfg,
-		Sources: srcConfig.ExportedMediaSourceDataList.MediaSources,
+		Config:        cfg,
+		SourceManager: source.NewSourceManager(),
 	}
 }
 
 // GetSource 获取指定索引的媒体源
 func (a *App) GetSource(index int) *webselector.WebSelectorSource {
-	if index < 0 || index >= len(a.Sources) {
+	ms := a.SourceManager.GetByIndex(index)
+	if ms == nil {
 		return nil
 	}
-	return webselector.New(a.Sources[index])
+	return webselector.New(*ms)
 }
 
 // GetFirstSource 获取第一个媒体源
 func (a *App) GetFirstSource() *webselector.WebSelectorSource {
 	return a.GetSource(0)
+}
+
+// GetSourceByName 根据名称获取媒体源
+func (a *App) GetSourceByName(name string) *webselector.WebSelectorSource {
+	ms := a.SourceManager.GetByName(name)
+	if ms == nil {
+		return nil
+	}
+	return webselector.New(*ms)
 }
 
 // GetPlayer 获取配置的播放器

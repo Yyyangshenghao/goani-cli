@@ -46,7 +46,7 @@ func printUsage(cmds map[string]commands.Command) {
 	fmt.Println()
 	fmt.Println("可用命令:")
 	for name, cmd := range cmds {
-		fmt.Printf("  %-10s %s\n", name, cmd.Usage())
+		fmt.Printf("  %-10s %s\n", name, cmd.ShortDesc())
 	}
 	fmt.Println()
 	fmt.Println("示例:")

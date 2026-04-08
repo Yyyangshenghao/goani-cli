@@ -22,6 +22,11 @@ func (c *ConfigCommand) Name() string {
 	return "config"
 }
 
+// ShortDesc 返回简短描述
+func (c *ConfigCommand) ShortDesc() string {
+	return "配置播放器"
+}
+
 // Run 执行命令
 func (c *ConfigCommand) Run(args []string) {
 	if len(args) < 3 || args[0] != "player" {

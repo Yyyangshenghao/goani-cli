@@ -23,6 +23,11 @@ func (c *SearchCommand) Name() string {
 	return "search"
 }
 
+// ShortDesc 返回简短描述
+func (c *SearchCommand) ShortDesc() string {
+	return "搜索动漫"
+}
+
 // Run 执行命令
 func (c *SearchCommand) Run(args []string) {
 	if len(args) < 1 {
