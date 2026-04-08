@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	fmt.Println("=== goani-cli 功能测试 ===\n")
+	fmt.Println("=== goani-cli 核心功能测试 ===\n")
 
 	// 测试 1: 加载配置
 	fmt.Println("【测试 1】加载订阅源配置")

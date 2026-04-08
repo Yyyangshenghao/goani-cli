@@ -22,9 +22,9 @@ A command-line anime player for Chinese web sources, written in Go.
 ### 特性
 
 - 🚀 单二进制文件，零依赖
-- 🌐 支持多个中文动漫源
-- 🔍 并行搜索多个源
-- 📺 支持多种播放器
+- 🌐 支持 38+ 中文动漫源
+- 🎮 交互式命令行界面
+- 📺 支持多种播放器（mpv、vlc、potplayer、iina）
 
 ### 致谢
 
@@ -35,17 +35,59 @@ A command-line anime player for Chinese web sources, written in Go.
 ## 安装
 
 ```bash
-go install github.com/yshscpu/goani-cli/cmd/kanfan@latest
+go install github.com/yshscpu/goani-cli/cmd/goani@latest
 ```
 
 或从 [Releases](https://github.com/yshscpu/goani-cli/releases) 下载预编译二进制文件。
 
 ## 使用
 
+### 配置播放器
+
+首次使用需要配置播放器路径：
+
 ```bash
-kanfan search "葬送的芙莉莲"
-kanfan play "葬送的芙莉莲" --episode 1
+# Windows
+goani config player mpv "D:\MPV播放器\mpv.exe"
+goani config player vlc "C:\Program Files\VideoLAN\VLC\vlc.exe"
+goani config player potplayer "C:\Program Files\DAUM\PotPlayer\PotPlayerMini64.exe"
+
+# macOS
+goani config player iina "/Applications/IINA.app/Contents/MacOS/iina-cli"
+goani config player mpv "/usr/local/bin/mpv"
+
+# Linux
+goani config player mpv "/usr/bin/mpv"
+goani config player vlc "/usr/bin/vlc"
 ```
+
+### 搜索动漫
+
+```bash
+goani search 葬送的芙莉莲
+```
+
+### 播放动漫
+
+```bash
+goani play 葬送的芙莉莲
+```
+
+### 其他命令
+
+```bash
+goani list       # 列出所有媒体源
+goani version    # 显示版本
+```
+
+## 支持的播放器
+
+| 播放器 | Windows | Linux | macOS |
+|--------|---------|-------|-------|
+| mpv | ✅ | ✅ | ✅ |
+| VLC | ✅ | ✅ | ✅ |
+| PotPlayer | ✅ | ❌ | ❌ |
+| IINA | ❌ | ❌ | ✅ |
 
 ## 开发
 
@@ -54,7 +96,14 @@ kanfan play "葬送的芙莉莲" --episode 1
 ```bash
 git clone https://github.com/yshscpu/goani-cli.git
 cd goani-cli
-go build -o kanfan ./cmd/kanfan
+go build -o goani ./cmd/goani
+```
+
+### 运行测试
+
+```bash
+go run test/source/main.go    # 核心功能测试
+go run test/player/main.go    # 播放器测试
 ```
 
 ### 项目结构
@@ -62,14 +111,43 @@ go build -o kanfan ./cmd/kanfan
 ```
 goani-cli/
 ├── cmd/
-│   └── kanfan/           # 入口
+│   └── goani/
+│       └── main.go              # 入口
 ├── internal/
-│   └── source/           # 媒体源模块
-│       ├── source.go     # 接口定义
-│       ├── config.go     # 配置结构体
-│       ├── config_loader.go
-│       └── web_selector.go
-├── mediaSourceJson/      # 订阅源配置
+│   ├── app/
+│   │   └── app.go               # 应用核心
+│   ├── cli/
+│   │   ├── root.go              # CLI 入口
+│   │   └── commands/
+│   │       └── commands.go      # 命令实现
+│   ├── config/
+│   │   └── config.go            # 配置管理
+│   ├── player/
+│   │   ├── player.go            # 播放器接口
+│   │   ├── manager.go           # 播放器管理器
+│   │   ├── mpv.go
+│   │   ├── vlc.go
+│   │   ├── potplayer.go
+│   │   └── iina.go
+│   ├── source/
+│   │   ├── source.go            # 媒体源接口
+│   │   ├── config.go            # 配置结构体
+│   │   ├── config_loader.go
+│   │   └── webselector/
+│   │       ├── webselector.go   # 爬虫实现
+│   │       ├── search.go
+│   │       ├── episode.go
+│   │       ├── video.go
+│   │       ├── fetch.go
+│   │       └── url.go
+│   └── ui/
+│       ├── ui.go                # UI 交互
+│       └── print.go             # 打印工具
+├── test/
+│   ├── source/main.go           # 核心功能测试
+│   └── player/main.go           # 播放器测试
+├── mediaSourceJson/
+│   └── css1.json                # 订阅源配置
 ├── go.mod
 └── go.sum
 ```
