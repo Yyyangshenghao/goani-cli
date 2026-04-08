@@ -33,7 +33,7 @@
 
 ### 方式二：Go install
 
-需要先安装 Go 1.22+：
+需要先安装 Go 1.23+：
 
 ```powershell
 go install github.com/Yyyangshenghao/goani-cli/cmd/goani@latest
@@ -67,12 +67,6 @@ go install github.com/Yyyangshenghao/goani-cli/cmd/goani@latest
 go install github.com/Yyyangshenghao/goani-cli/cmd/goani@latest
 ```
 
-### 方式三：Homebrew（计划中）
-
-```bash
-brew install yyyangshenghao/tap/goani
-```
-
 ---
 
 ## Linux
@@ -99,10 +93,4 @@ brew install yyyangshenghao/tap/goani
 
 ```bash
 go install github.com/Yyyangshenghao/goani-cli/cmd/goani@latest
-```
-
-### 方式三：AUR（Arch Linux）
-
-```bash
-yay -S goani-cli-bin
 ```

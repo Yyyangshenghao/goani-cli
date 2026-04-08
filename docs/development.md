@@ -9,13 +9,11 @@ goani-cli/
 │   ├── app/            # 应用核心
 │   ├── cli/            # CLI 框架
 │   │   └── commands/   # 命令实现
-│   ├── config/         # 配置管理
-│   ├── player/         # 播放器接口
-│   ├── source/         # 媒体源接口
+│   ├── player/         # 播放器接口与配置
+│   ├── source/         # 媒体源接口与管理
 │   │   └── webselector/ # Web 抓取实现
 │   ├── ui/             # 终端交互
 │   └── version/        # 版本管理
-├── mediaSourceJson/    # 媒体源配置
 ├── docs/               # 文档
 └── test/               # 测试
 ```
@@ -26,7 +24,7 @@ goani-cli/
 
 ### 前置要求
 
-- Go 1.22+
+- Go 1.23+
 
 ### 克隆并构建
 
@@ -103,6 +101,7 @@ type Command interface {
     Name() string
     Run(args []string)
     Usage() string
+    ShortDesc() string
 }
 ```
 
