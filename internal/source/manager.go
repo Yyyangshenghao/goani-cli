@@ -63,7 +63,14 @@ func (sm *SourceManager) load() {
 	}
 
 	// 2. 刷新当前订阅
-	sm.refreshSourcesLocked()
+	subscriptions, sources, ok := sm.fetchSubscriptionsLocked(sm.subscriptions)
+	if !ok {
+		sm.sources = []MediaSource{}
+		return
+	}
+	sm.subscriptions = subscriptions
+	sm.sources = sources
+	_ = sm.saveLocked()
 }
 
 // loadCache 加载缓存的配置
@@ -189,21 +196,33 @@ func (sm *SourceManager) Unsubscribe(url string) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
+	nextSubscriptions := cloneSubscriptions(sm.subscriptions)
+
 	// 移除订阅
-	for i, sub := range sm.subscriptions {
+	for i, sub := range nextSubscriptions {
 		if sub.URL == url {
-			sm.subscriptions = append(sm.subscriptions[:i], sm.subscriptions[i+1:]...)
+			nextSubscriptions = append(nextSubscriptions[:i], nextSubscriptions[i+1:]...)
 			break
 		}
 	}
 
-	// 重新加载：默认源 + 剩余订阅
-	sm.sources = []MediaSource{}
-	for _, sub := range sm.subscriptions {
-		sources, _ := sm.fetchFromURL(sub.URL)
-		sm.sources = append(sm.sources, sources...)
+	if len(nextSubscriptions) == len(sm.subscriptions) {
+		return fmt.Errorf("未找到该订阅")
 	}
 
+	if len(nextSubscriptions) == 0 {
+		sm.subscriptions = nextSubscriptions
+		sm.sources = []MediaSource{}
+		return sm.saveLocked()
+	}
+
+	refreshedSubscriptions, sources, ok := sm.fetchSubscriptionsLocked(nextSubscriptions)
+	if !ok {
+		return fmt.Errorf("无法刷新剩余订阅，已保留原有配置")
+	}
+
+	sm.subscriptions = refreshedSubscriptions
+	sm.sources = sources
 	return sm.saveLocked()
 }
 
@@ -216,17 +235,13 @@ func (sm *SourceManager) Refresh() error {
 		return nil
 	}
 
-	// 重新获取所有订阅
-	sm.sources = []MediaSource{}
-	for i := range sm.subscriptions {
-		sources, err := sm.fetchFromURL(sm.subscriptions[i].URL)
-		if err != nil {
-			continue
-		}
-		sm.subscriptions[i].UpdatedAt = time.Now().Format("2006-01-02 15:04:05")
-		sm.sources = append(sm.sources, sources...)
+	refreshedSubscriptions, sources, ok := sm.fetchSubscriptionsLocked(sm.subscriptions)
+	if !ok {
+		return fmt.Errorf("所有订阅刷新失败，已保留原有缓存")
 	}
 
+	sm.subscriptions = refreshedSubscriptions
+	sm.sources = sources
 	return sm.saveLocked()
 }
 
@@ -235,12 +250,17 @@ func (sm *SourceManager) Reset() error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	// 删除缓存文件
-	os.Remove(sm.cachePath)
+	subscriptions := defaultSubscriptions()
+	refreshedSubscriptions, sources, ok := sm.fetchSubscriptionsLocked(subscriptions)
+	if !ok {
+		return fmt.Errorf("默认源刷新失败，已保留原有配置")
+	}
 
-	// 重新订阅默认源
-	sm.subscriptions = defaultSubscriptions()
-	sm.refreshSourcesLocked()
+	sm.subscriptions = refreshedSubscriptions
+	sm.sources = sources
+
+	// 删除旧缓存文件后保存新状态
+	_ = os.Remove(sm.cachePath)
 	return sm.saveLocked()
 }
 
@@ -276,17 +296,26 @@ func GetCachePath() string {
 	return path
 }
 
-func (sm *SourceManager) refreshSourcesLocked() {
-	sm.sources = []MediaSource{}
-	for i := range sm.subscriptions {
-		sources, err := sm.fetchFromURL(sm.subscriptions[i].URL)
+func (sm *SourceManager) fetchSubscriptionsLocked(subscriptions []Subscription) ([]Subscription, []MediaSource, bool) {
+	if len(subscriptions) == 0 {
+		return []Subscription{}, []MediaSource{}, true
+	}
+
+	refreshed := cloneSubscriptions(subscriptions)
+	sources := make([]MediaSource, 0)
+	successCount := 0
+
+	for i := range refreshed {
+		fetchedSources, err := sm.fetchFromURL(refreshed[i].URL)
 		if err != nil {
 			continue
 		}
-		sm.subscriptions[i].UpdatedAt = time.Now().Format("2006-01-02 15:04:05")
-		sm.sources = append(sm.sources, sources...)
+		refreshed[i].UpdatedAt = time.Now().Format("2006-01-02 15:04:05")
+		sources = append(sources, fetchedSources...)
+		successCount++
 	}
-	_ = sm.saveLocked()
+
+	return refreshed, sources, successCount > 0
 }
 
 func (sm *SourceManager) saveLocked() error {
