@@ -68,6 +68,7 @@ func (c *SearchCommand) Run(args []string) {
 	var completed int
 	var selectedIndex int = -1
 
+loop:
 	for completed < totalSources {
 		select {
 		case result := <-resultChan:
@@ -88,7 +89,7 @@ func (c *SearchCommand) Run(args []string) {
 		case idx := <-selectedChan:
 			selectedIndex = idx
 			close(done)
-			break
+			break loop
 		}
 	}
 
