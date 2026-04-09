@@ -2,10 +2,13 @@ package webselector
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 
 	"github.com/dlclark/regexp2"
 )
+
+var ErrVideoURLNotFound = errors.New("无法解析视频链接")
 
 // GetVideoURL 获取视频直链
 func (s *WebSelectorSource) GetVideoURL(episodeURL string) (string, error) {
@@ -28,14 +31,18 @@ func (s *WebSelectorSource) GetVideoURL(episodeURL string) (string, error) {
 
 	match, err := re.FindStringMatch(html)
 	if err != nil || match == nil {
-		return "", nil
+		return "", ErrVideoURLNotFound
 	}
 
 	if v := match.GroupByName("v"); v != nil && v.String() != "" {
 		return v.String(), nil
 	}
 
-	return match.String(), nil
+	result := match.String()
+	if result == "" {
+		return "", ErrVideoURLNotFound
+	}
+	return result, nil
 }
 
 // extractPlayerAAAA 从 player_aaaa 变量中提取视频 URL

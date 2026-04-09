@@ -35,8 +35,9 @@ func (p *IINAPlayer) Play(url string) error {
 
 // PlayWithArgs 带参数播放
 func (p *IINAPlayer) PlayWithArgs(url string, args []string) error {
-	cmdArgs := append([]string{url}, args...)
-	cmd := exec.Command(p.path, cmdArgs...)
+	// 使用 open 命令打开 IINA，更可靠
+	cmdArgs := []string{"-a", "IINA", url}
+	cmd := exec.Command("open", cmdArgs...)
 	return cmd.Start()
 }
 
