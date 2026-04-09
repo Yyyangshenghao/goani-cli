@@ -41,6 +41,9 @@ goani config player mpv "/path/to/mpv"
 # 搜索动漫
 goani search 葬送的芙莉莲
 
+# 实时搜索（支持时启用 TUI，不支持时自动回退）
+goani search --interactive 葬送的芙莉莲
+
 # 搜索并播放
 goani play 葬送的芙莉莲
 ```

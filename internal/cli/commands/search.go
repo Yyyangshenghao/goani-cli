@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/Yyyangshenghao/goani-cli/internal/app"
@@ -39,13 +40,22 @@ func (c *SearchCommand) ShortDesc() string {
 
 // Run 执行命令
 func (c *SearchCommand) Run(args []string) {
-	if len(args) < 1 {
+	interactive, keyword := parseSearchArgs(args)
+	if keyword == "" && !interactive {
 		fmt.Println(c.Usage())
 		os.Exit(1)
 	}
 
 	application := c.ensureApp()
-	keyword := args[0]
+	if interactive {
+		c.runInteractiveSearch(application, keyword)
+		return
+	}
+
+	c.runClassicSearch(application, keyword)
+}
+
+func (c *SearchCommand) runClassicSearch(application *app.App, keyword string) {
 	totalSources := application.SourceManager.Count()
 	if totalSources == 0 {
 		ui.Error("未找到媒体源")
@@ -127,9 +137,59 @@ loop:
 	showAnimeListAndSelect(application, selectedResult.Results, selectedResult.SourceName)
 }
 
+func (c *SearchCommand) runInteractiveSearch(application *app.App, keyword string) {
+	if application.SourceManager.Count() == 0 {
+		ui.Error("未找到媒体源")
+		os.Exit(1)
+	}
+
+	if !ui.SupportsInteractiveTUI() {
+		if keyword == "" {
+			keyword = ui.Input("输入关键词: ")
+		}
+		keyword = strings.TrimSpace(keyword)
+		if keyword == "" {
+			fmt.Println("已取消")
+			return
+		}
+		ui.Info("当前终端不支持交互式 TUI，已切换到普通搜索模式")
+		c.runClassicSearch(application, keyword)
+		return
+	}
+
+	selection, err := ui.RunSearchTUI(application, keyword)
+	if err != nil {
+		ui.Error("启动实时搜索失败: %v", err)
+		os.Exit(1)
+	}
+	if selection == nil {
+		fmt.Println("已取消")
+		return
+	}
+
+	ui.Success("已选择: %s", selection.SourceName)
+	showAnimeListAndSelect(application, selection.Results, selection.SourceName)
+}
+
 // Usage 返回使用说明
 func (c *SearchCommand) Usage() string {
-	return "用法: goani search <keyword>\n示例: goani search 葬送的芙莉莲"
+	return "用法: goani search [--interactive|-i] <keyword>\n示例: goani search 葬送的芙莉莲\n      goani search --interactive 葬送的芙莉莲"
+}
+
+func parseSearchArgs(args []string) (bool, string) {
+	interactive := false
+	keywordParts := make([]string, 0, len(args))
+
+	for _, arg := range args {
+		switch arg {
+		case "--interactive", "-i":
+			interactive = true
+		default:
+			keywordParts = append(keywordParts, arg)
+		}
+	}
+
+	return interactive, strings.TrimSpace(strings.Join(keywordParts, " "))
 }
 
 // --- 辅助函数 ---

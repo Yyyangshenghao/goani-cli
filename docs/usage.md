@@ -99,6 +99,25 @@ goani search 进击的巨人
 
 搜索后会显示结果列表，选择后可查看剧集并播放。
 
+### 实时搜索（TUI）
+
+```bash
+goani search --interactive [关键词]
+goani search -i [关键词]
+```
+
+示例：
+
+```bash
+goani search --interactive 葬送的芙莉莲
+goani search -i
+```
+
+说明：
+- 支持交互式终端时，会进入实时搜索 TUI
+- 不支持 TUI 的终端会自动回退到普通搜索模式
+- 在 TUI 中可直接输入关键词，支持上下选择片源并回车确认
+
 ---
 
 ## 播放动漫
