@@ -1,12 +1,7 @@
 package source
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -17,22 +12,10 @@ import (
 type SourceManager struct {
 	sources       []MediaSource
 	subscriptions []Subscription
-	cachePath     string
 	config        *settings.Config
+	cache         *sourceCacheStore
+	fetcher       *sourceFetcher
 	mu            sync.RWMutex
-}
-
-// Subscription 订阅配置
-type Subscription struct {
-	URL       string `json:"url"`
-	Name      string `json:"name"`
-	UpdatedAt string `json:"updatedAt,omitempty"`
-}
-
-// SourceCache 片源缓存文件
-type SourceCache struct {
-	Subscriptions []Subscription `json:"subscriptions"`
-	Sources       []MediaSource  `json:"sources"`
 }
 
 // NewSourceManager 创建媒体源管理器
@@ -40,8 +23,9 @@ func NewSourceManager(cfg *settings.Config) *SourceManager {
 	cachePath, _ := settings.GetSourceCachePath()
 
 	sm := &SourceManager{
-		cachePath: cachePath,
-		config:    cfg,
+		config:  cfg,
+		cache:   newSourceCacheStore(cachePath),
+		fetcher: newSourceFetcher(30 * time.Second),
 	}
 	sm.load()
 	return sm
@@ -75,13 +59,8 @@ func (sm *SourceManager) load() {
 
 // loadCache 加载缓存的配置
 func (sm *SourceManager) loadCache() bool {
-	data, err := os.ReadFile(sm.cachePath)
+	cfg, err := sm.cache.Load()
 	if err != nil {
-		return false
-	}
-
-	var cfg SourceCache
-	if err := json.Unmarshal(data, &cfg); err != nil {
 		return false
 	}
 
@@ -100,22 +79,10 @@ func (sm *SourceManager) loadCache() bool {
 
 // saveCache 保存缓存
 func (sm *SourceManager) saveCache() error {
-	configDir := filepath.Dir(sm.cachePath)
-	if err := os.MkdirAll(configDir, 0755); err != nil {
-		return err
-	}
-
-	cfg := SourceCache{
+	return sm.cache.Save(SourceCache{
 		Subscriptions: cloneSubscriptions(sm.subscriptions),
 		Sources:       sm.sources,
-	}
-
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(sm.cachePath, data, 0644)
+	})
 }
 
 // GetAll 获取所有媒体源
@@ -174,7 +141,7 @@ func (sm *SourceManager) Subscribe(url, name string) error {
 	}
 
 	// 获取远程配置
-	sources, err := sm.fetchFromURL(url)
+	sources, err := sm.fetcher.FetchURL(url)
 	if err != nil {
 		return fmt.Errorf("获取配置失败: %w", err)
 	}
@@ -260,34 +227,8 @@ func (sm *SourceManager) Reset() error {
 	sm.sources = sources
 
 	// 删除旧缓存文件后保存新状态
-	_ = os.Remove(sm.cachePath)
+	_ = sm.cache.Remove()
 	return sm.saveLocked()
-}
-
-// fetchFromURL 从URL获取媒体源配置
-func (sm *SourceManager) fetchFromURL(url string) ([]MediaSource, error) {
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	var cfg Config
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil, err
-	}
-
-	return cfg.ExportedMediaSourceDataList.MediaSources, nil
 }
 
 // GetCachePath 获取缓存文件路径
@@ -297,25 +238,7 @@ func GetCachePath() string {
 }
 
 func (sm *SourceManager) fetchSubscriptionsLocked(subscriptions []Subscription) ([]Subscription, []MediaSource, bool) {
-	if len(subscriptions) == 0 {
-		return []Subscription{}, []MediaSource{}, true
-	}
-
-	refreshed := cloneSubscriptions(subscriptions)
-	sources := make([]MediaSource, 0)
-	successCount := 0
-
-	for i := range refreshed {
-		fetchedSources, err := sm.fetchFromURL(refreshed[i].URL)
-		if err != nil {
-			continue
-		}
-		refreshed[i].UpdatedAt = time.Now().Format("2006-01-02 15:04:05")
-		sources = append(sources, fetchedSources...)
-		successCount++
-	}
-
-	return refreshed, sources, successCount > 0
+	return sm.fetcher.FetchSubscriptions(subscriptions)
 }
 
 func (sm *SourceManager) saveLocked() error {
@@ -324,60 +247,4 @@ func (sm *SourceManager) saveLocked() error {
 		return err
 	}
 	return sm.saveCache()
-}
-
-func sameSubscriptions(a, b []Subscription) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i].URL != b[i].URL || a[i].Name != b[i].Name {
-			return false
-		}
-	}
-	return true
-}
-
-func defaultSubscriptions() []Subscription {
-	return subscriptionsFromSettings(settings.DefaultSubscriptions())
-}
-
-func subscriptionsFromSettings(subs []settings.Subscription) []Subscription {
-	if len(subs) == 0 {
-		return nil
-	}
-
-	result := make([]Subscription, len(subs))
-	for i, sub := range subs {
-		result[i] = Subscription{
-			URL:  sub.URL,
-			Name: sub.Name,
-		}
-	}
-	return result
-}
-
-func subscriptionsToSettings(subs []Subscription) []settings.Subscription {
-	if len(subs) == 0 {
-		return nil
-	}
-
-	result := make([]settings.Subscription, len(subs))
-	for i, sub := range subs {
-		result[i] = settings.Subscription{
-			URL:  sub.URL,
-			Name: sub.Name,
-		}
-	}
-	return result
-}
-
-func cloneSubscriptions(subs []Subscription) []Subscription {
-	if len(subs) == 0 {
-		return nil
-	}
-
-	cloned := make([]Subscription, len(subs))
-	copy(cloned, subs)
-	return cloned
 }
