@@ -58,3 +58,8 @@ func (a *App) GetPlayer() player.Player {
 func (a *App) SaveConfig() error {
 	return a.PlayerConfig.Save()
 }
+
+// GetAllSources 获取所有媒体源
+func (a *App) GetAllSources() []source.MediaSource {
+	return a.SourceManager.GetAll()
+}
