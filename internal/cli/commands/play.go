@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/Yyyangshenghao/goani-cli/internal/app"
+	"github.com/Yyyangshenghao/goani-cli/internal/source"
 	"github.com/Yyyangshenghao/goani-cli/internal/ui"
 )
 
@@ -74,31 +75,29 @@ func (c *PlayCommand) Run(args []string) {
 		ui.Error("获取剧集失败: %v", err)
 		os.Exit(1)
 	}
+	groups := source.GroupEpisodes(episodes)
+	if len(groups) == 0 {
+		ui.Info("没有可用剧集")
+		return
+	}
 
-	ui.Success("找到 %d 集", len(episodes))
+	ui.Success("找到 %d 集", len(groups))
 
 	// 选择剧集
-	epIdx, err := ui.Select("选择剧集", len(episodes), func(i int) string { return episodes[i].Name })
+	epIdx, err := ui.Select("选择剧集", len(groups), func(i int) string { return groups[i].Label() })
 	if err != nil {
 		fmt.Println("已取消")
 		return
 	}
 
 	// 播放
-	playEpisode(application, episodes[epIdx].URL)
+	if err := playEpisodeGroupCLI(application, src, groups[epIdx]); err != nil {
+		ui.Error("%v", err)
+		os.Exit(1)
+	}
 }
 
 // Usage 返回使用说明
 func (c *PlayCommand) Usage() string {
 	return "用法: goani play <keyword>\n示例: goani play 葬送的芙莉莲"
-}
-
-func playEpisode(application *app.App, episodeURL string) {
-	src := application.GetFirstSource()
-	videoURL, err := src.GetVideoURL(episodeURL)
-	if err != nil {
-		ui.Error("获取视频链接失败: %v", err)
-		os.Exit(1)
-	}
-	playVideo(application, videoURL)
 }

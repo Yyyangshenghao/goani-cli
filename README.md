@@ -35,13 +35,16 @@
 首次播放前，请先确保系统已安装 `mpv`、`vlc`、`potplayer` 或 `iina` 之一；如果程序未自动识别到播放器，可按[使用指南](docs/usage.md#配置播放器)手动配置路径。
 
 ```bash
+# 进入交互式 TUI
+goani tui
+
 # 配置播放器（会同时设为默认播放器）
 goani config player mpv "/path/to/mpv"
 
 # 搜索动漫
 goani search 葬送的芙莉莲
 
-# 实时搜索（支持时启用 TUI，不支持时自动回退）
+# 直接进入搜索 TUI（兼容入口）
 goani search --interactive 葬送的芙莉莲
 
 # 搜索并播放
@@ -57,7 +60,7 @@ goani play 葬送的芙莉莲
 | [安装指南](docs/installation.md) | Windows / macOS / Linux 安装方法 |
 | [使用指南](docs/usage.md) | 命令详解与播放器配置 |
 | [常见问题](docs/faq.md) | FAQ 与故障排除 |
-| [开发指南](docs/development.md) | 构建、测试与贡献 |
+| [开发指南](docs/dev/development.md) | 构建、测试与贡献 |
 
 ---
 

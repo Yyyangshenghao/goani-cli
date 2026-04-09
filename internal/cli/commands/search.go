@@ -35,7 +35,7 @@ func (c *SearchCommand) Name() string {
 
 // ShortDesc 返回简短描述
 func (c *SearchCommand) ShortDesc() string {
-	return "搜索动漫"
+	return "搜索动漫（支持实时 TUI）"
 }
 
 // Run 执行命令
@@ -138,9 +138,15 @@ loop:
 }
 
 func (c *SearchCommand) runInteractiveSearch(application *app.App, keyword string) {
-	if application.SourceManager.Count() == 0 {
-		ui.Error("未找到媒体源")
+	if err := c.runInteractiveSearchWithError(application, keyword); err != nil {
+		ui.Error("%v", err)
 		os.Exit(1)
+	}
+}
+
+func (c *SearchCommand) runInteractiveSearchWithError(application *app.App, keyword string) error {
+	if application.SourceManager.Count() == 0 {
+		return fmt.Errorf("未找到媒体源")
 	}
 
 	if !ui.SupportsInteractiveTUI() {
@@ -150,30 +156,27 @@ func (c *SearchCommand) runInteractiveSearch(application *app.App, keyword strin
 		keyword = strings.TrimSpace(keyword)
 		if keyword == "" {
 			fmt.Println("已取消")
-			return
+			return nil
 		}
 		ui.Info("当前终端不支持交互式 TUI，已切换到普通搜索模式")
 		c.runClassicSearch(application, keyword)
-		return
+		return nil
 	}
 
 	selection, err := ui.RunSearchTUI(application, keyword)
 	if err != nil {
-		ui.Error("启动实时搜索失败: %v", err)
-		os.Exit(1)
+		return fmt.Errorf("启动实时搜索失败: %w", err)
 	}
 	if selection == nil {
-		fmt.Println("已取消")
-		return
+		return nil
 	}
 
-	ui.Success("已选择: %s", selection.SourceName)
-	showAnimeListAndSelect(application, selection.Results, selection.SourceName)
+	return c.showInteractiveSelectionFlow(application, selection.Results, selection.SourceName)
 }
 
 // Usage 返回使用说明
 func (c *SearchCommand) Usage() string {
-	return "用法: goani search [--interactive|-i] <keyword>\n示例: goani search 葬送的芙莉莲\n      goani search --interactive 葬送的芙莉莲"
+	return "用法: goani search [--interactive|-i] <keyword>\n\n参数:\n  --interactive, -i    启用实时交互式搜索界面（TUI）\n\n示例:\n  goani search 葬送的芙莉莲\n  goani search --interactive 葬送的芙莉莲\n  goani search -i 葬送的芙莉莲"
 }
 
 func parseSearchArgs(args []string) (bool, string) {
@@ -193,6 +196,54 @@ func parseSearchArgs(args []string) (bool, string) {
 }
 
 // --- 辅助函数 ---
+
+func (c *SearchCommand) showInteractiveSelectionFlow(application *app.App, animes []source.Anime, sourceName string) error {
+	if len(animes) == 0 {
+		return nil
+	}
+
+	src := application.GetSourceByName(sourceName)
+	if src == nil {
+		return fmt.Errorf("无法获取媒体源")
+	}
+
+	for {
+		anime, err := ui.RunAnimeSelectionTUI(sourceName, animes)
+		if err != nil {
+			return fmt.Errorf("打开番剧选择界面失败: %w", err)
+		}
+		if anime == nil {
+			return nil
+		}
+
+		episodes, err := src.GetEpisodes(anime.URL)
+		if err != nil {
+			showTUIErrorScreen("获取剧集失败", err.Error())
+			continue
+		}
+		groups := source.GroupEpisodes(episodes)
+		if len(groups) == 0 {
+			showTUIErrorScreen("没有可用剧集", "当前番剧没有解析到可播放剧集")
+			continue
+		}
+
+		for {
+			episode, err := ui.RunEpisodeSelectionTUI(anime.Name, groups)
+			if err != nil {
+				return fmt.Errorf("打开选集界面失败: %w", err)
+			}
+			if episode == nil {
+				break
+			}
+
+			if err := playEpisodeGroupTUI(application, src, *episode); err != nil {
+				showTUIErrorScreen("播放失败", err.Error())
+				continue
+			}
+			return nil
+		}
+	}
+}
 
 func showAnimeListAndSelect(application *app.App, animes []source.Anime, sourceName string) {
 	if len(animes) == 0 {
@@ -227,36 +278,34 @@ func showEpisodesAndSelectWithSource(src *webselector.WebSelectorSource, animeUR
 		ui.Error("获取剧集失败: %v", err)
 		os.Exit(1)
 	}
+	groups := source.GroupEpisodes(episodes)
+	if len(groups) == 0 {
+		ui.Info("没有可用剧集")
+		return
+	}
 
-	ui.Success("找到 %d 集", len(episodes))
-	printEpisodes(episodes, 20)
+	ui.Success("找到 %d 集", len(groups))
+	printEpisodeGroups(groups, 20)
 
-	epIdx, err := ui.Select("选择剧集", len(episodes), func(i int) string { return episodes[i].Name })
+	epIdx, err := ui.Select("选择剧集", len(groups), func(i int) string { return groups[i].Label() })
 	if err != nil {
 		fmt.Println("已取消")
 		return
 	}
 
-	videoURL, err := src.GetVideoURL(episodes[epIdx].URL)
-	if err != nil {
-		ui.Error("获取视频链接失败: %v", err)
+	if err := playEpisodeGroupCLI(app.New(), src, groups[epIdx]); err != nil {
+		ui.Error("%v", err)
 		os.Exit(1)
-	}
-
-	ui.Success("视频链接: %s", videoURL)
-
-	if ui.Confirm("是否播放?") {
-		playVideoWithApp(videoURL)
 	}
 }
 
-func printEpisodes(episodes []source.Episode, max int) {
-	for i, ep := range episodes {
+func printEpisodeGroups(groups []source.EpisodeGroup, max int) {
+	for i, ep := range groups {
 		if i >= max {
-			fmt.Printf("  ... 还有 %d 集\n", len(episodes)-max)
+			fmt.Printf("  ... 还有 %d 集\n", len(groups)-max)
 			break
 		}
-		fmt.Printf("  %d. %s\n", i+1, ep.Name)
+		fmt.Printf("  %d. %s\n", i+1, ep.Label())
 	}
 }
 
@@ -292,4 +341,79 @@ func playVideo(application *app.App, url string) {
 		os.Exit(1)
 	}
 	ui.Success("播放器已启动")
+}
+
+func playVideoTUI(application *app.App, url string) error {
+	p := application.GetPlayer()
+	if p == nil {
+		return fmt.Errorf("未找到可用播放器\n\n请先配置: goani config player <name> <path>")
+	}
+	if err := p.Play(url); err != nil {
+		return fmt.Errorf("播放失败: %w", err)
+	}
+	return nil
+}
+
+func playEpisodeGroupTUI(application *app.App, src *webselector.WebSelectorSource, group source.EpisodeGroup) error {
+	p := application.GetPlayer()
+	if p == nil {
+		return fmt.Errorf("未找到可用播放器\n\n请先配置: goani config player <name> <path>")
+	}
+
+	var attempts []string
+	for i, candidate := range group.Candidates {
+		videoURL, err := src.GetVideoURL(candidate.URL)
+		label := episodeCandidateLabel(group, i, candidate)
+		if err != nil {
+			attempts = append(attempts, fmt.Sprintf("%s 解析失败: %v", label, err))
+			continue
+		}
+		if err := p.Play(videoURL); err != nil {
+			attempts = append(attempts, fmt.Sprintf("%s 播放失败: %v", label, err))
+			continue
+		}
+		return nil
+	}
+
+	return fmt.Errorf("这一集的所有线路都失败了\n\n%s", strings.Join(attempts, "\n"))
+}
+
+func playEpisodeGroupCLI(application *app.App, src *webselector.WebSelectorSource, group source.EpisodeGroup) error {
+	p := application.GetPlayer()
+	if p == nil {
+		return fmt.Errorf("未找到可用播放器\n请先配置: goani config player <name> <path>")
+	}
+
+	var attempts []string
+	for i, candidate := range group.Candidates {
+		videoURL, err := src.GetVideoURL(candidate.URL)
+		label := episodeCandidateLabel(group, i, candidate)
+		if err != nil {
+			attempts = append(attempts, fmt.Sprintf("%s 解析失败: %v", label, err))
+			continue
+		}
+		ui.Info("使用 %s 播放 %s...", p.Name(), label)
+		if err := p.Play(videoURL); err != nil {
+			attempts = append(attempts, fmt.Sprintf("%s 播放失败: %v", label, err))
+			continue
+		}
+		ui.Success("播放器已启动")
+		return nil
+	}
+
+	return fmt.Errorf("这一集的所有线路都失败了:\n%s", strings.Join(attempts, "\n"))
+}
+
+func episodeCandidateLabel(group source.EpisodeGroup, index int, candidate source.EpisodeCandidate) string {
+	name := strings.TrimSpace(candidate.Name)
+	if name == "" || name == group.Name {
+		return fmt.Sprintf("线路%d", index+1)
+	}
+	return name
+}
+
+func showTUIErrorScreen(title, message string) {
+	if err := ui.RunTextTUI(title, message); err != nil {
+		ui.Error("%s: %s", title, message)
+	}
 }

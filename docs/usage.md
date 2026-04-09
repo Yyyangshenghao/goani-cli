@@ -22,6 +22,7 @@ goani <command> [arguments]
 | 命令 | 说明 |
 |------|------|
 | `search` | 搜索动漫 |
+| `tui` | 进入交互式 TUI 模式 |
 | `play` | 搜索并播放动漫 |
 | `source` | 管理媒体源订阅 |
 | `config` | 配置播放器 |
@@ -102,6 +103,7 @@ goani search 进击的巨人
 ### 实时搜索（TUI）
 
 ```bash
+goani tui [关键词]
 goani search --interactive [关键词]
 goani search -i [关键词]
 ```
@@ -109,14 +111,22 @@ goani search -i [关键词]
 示例：
 
 ```bash
+goani tui 葬送的芙莉莲
+goani tui
 goani search --interactive 葬送的芙莉莲
 goani search -i
 ```
 
 说明：
+- `goani tui` 是推荐的完整 TUI 入口，首页可查看搜索、媒体源、配置说明和版本信息
 - 支持交互式终端时，会进入实时搜索 TUI
-- 不支持 TUI 的终端会自动回退到普通搜索模式
+- `goani search --interactive` / `-i` 作为兼容入口继续保留
+- `goani tui` 在不支持 TUI 的终端中会直接提示改用经典 CLI
+- `goani search --interactive` 在不支持 TUI 的终端中会自动回退到普通搜索模式
 - 在 TUI 中可直接输入关键词，支持上下选择片源并回车确认
+- 进入番剧页后可继续用 TUI 选择番剧和剧集
+- 选集页支持 `r` 切换顺序/倒序，直接输入数字跳到对应集数
+- `Esc` 会按层级返回上一页，`Ctrl+C` 可直接退出当前界面
 
 ---
 

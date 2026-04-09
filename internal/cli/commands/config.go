@@ -6,6 +6,7 @@ import (
 
 	"github.com/Yyyangshenghao/goani-cli/internal/app"
 	"github.com/Yyyangshenghao/goani-cli/internal/player"
+	"github.com/Yyyangshenghao/goani-cli/internal/settings"
 	"github.com/Yyyangshenghao/goani-cli/internal/ui"
 )
 
@@ -97,13 +98,41 @@ func (c *ConfigCommand) setDefaultPlayer(args []string) {
 
 // Usage 返回使用说明
 func (c *ConfigCommand) Usage() string {
-	return `用法:
+	configPath, err := settings.GetConfigPath()
+	if err != nil {
+		configPath = "~/.goani/config.json（Windows 下一般是 %USERPROFILE%\\.goani\\config.json）"
+	}
+
+	return fmt.Sprintf(`用法:
   goani config player <name> <path>
   goani config player default <name>
+
+说明:
+  也可以直接编辑配置文件 JSON
+  当前配置文件: %s
+
+JSON 结构示例:
+  {
+    "player": {
+      "default": "mpv",
+      "paths": {
+        "mpv": "D:\\MPV播放器\\mpv.exe",
+        "vlc": "C:\\Program Files\\VideoLAN\\VLC\\vlc.exe"
+      }
+    },
+    "sources": {
+      "subscriptions": [
+        {
+          "url": "https://sub.creamycake.org/v1/css1.json",
+          "name": "默认源"
+        }
+      ]
+    }
+  }
 
 示例:
   Windows:   goani config player mpv "D:\MPV播放器\mpv.exe"
   设置默认:   goani config player default mpv
   macOS:     goani config player iina "/Applications/IINA.app/Contents/MacOS/iina-cli"
-  Linux:     goani config player mpv "/usr/bin/mpv"`
+  Linux:     goani config player mpv "/usr/bin/mpv"`, configPath)
 }
