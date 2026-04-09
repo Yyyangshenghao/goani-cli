@@ -1,4 +1,4 @@
-package ui
+package tui
 
 import (
 	"fmt"
@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"golang.org/x/term"
 
@@ -27,6 +27,7 @@ var (
 	tuiPickStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("62")).Bold(true)
 )
 
+// SearchTUISelection 表示搜索页完成后交给后续流程的选择结果。
 // SearchTUISelection TUI 搜索完成后的选择结果
 type SearchTUISelection struct {
 	SourceName string
@@ -44,6 +45,7 @@ type searchResultMsg struct {
 	result    app.SourceSearchResult
 }
 
+// searchTUIModel 管理实时搜索页的输入、防抖请求和结果列表状态。
 type searchTUIModel struct {
 	app          *app.App
 	input        textinput.Model
@@ -74,7 +76,7 @@ func SupportsInteractiveTUI() bool {
 // RunSearchTUI 运行交互式实时搜索
 func RunSearchTUI(application *app.App, initialKeyword string) (*SearchTUISelection, error) {
 	model := newSearchTUIModel(application, initialKeyword)
-	program := tea.NewProgram(model, tea.WithAltScreen())
+	program := newProgram(model)
 	finalModel, err := program.Run()
 	if err != nil {
 		return nil, err

@@ -33,6 +33,15 @@ func (s *WebSelectorSource) Client() *http.Client {
 	return s.client
 }
 
+// WithTimeout 克隆一个只修改了 HTTP 超时的源实例，方便在不同阶段使用更短的网络预算。
+func (s *WebSelectorSource) WithTimeout(timeout time.Duration) *WebSelectorSource {
+	clone := *s
+	clientCopy := *s.client
+	clientCopy.Timeout = timeout
+	clone.client = &clientCopy
+	return &clone
+}
+
 // TestSourceManager 测试用的媒体源管理器
 type TestSourceManager struct {
 	sources []source.MediaSource

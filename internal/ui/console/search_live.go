@@ -1,4 +1,4 @@
-package ui
+package console
 
 import (
 	"fmt"
@@ -9,6 +9,8 @@ import (
 	"github.com/Yyyangshenghao/goani-cli/internal/app"
 )
 
+// SearchUI 是经典控制台模式下的实时搜索结果面板。
+// 它不是完整 TUI，而是通过重绘终端文本来持续展示搜索进度。
 // SearchUI 搜索界面状态
 type SearchUI struct {
 	keyword string

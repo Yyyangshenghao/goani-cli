@@ -1,10 +1,11 @@
-package ui
+package tui
 
 import (
 	"fmt"
 	"strconv"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/Yyyangshenghao/goani-cli/internal/source"
@@ -14,17 +15,22 @@ type selectorTUIResult struct {
 	index int
 }
 
+// selectorTUIModel 是通用列表选择页，服务于番剧选择和选集选择两个场景。
 type selectorTUIModel struct {
 	title        string
 	subtitle     string
 	emptyMessage string
 	items        []string
 	jumpValues   []string
+	showOrdinal  bool
+	allowFilter  bool
 	allowReverse bool
 	allowNumber  bool
 	reversed     bool
 	selected     int
 	numberBuffer string
+	filterInput  textinput.Model
+	filtered     []int
 	result       *selectorTUIResult
 	windowHeight int
 }
@@ -38,13 +44,21 @@ func RunAnimeSelectionTUI(sourceName string, animes []source.Anime) (*source.Ani
 		jumpValues[i] = strconv.Itoa(i + 1)
 	}
 
+	filterInput := textinput.New()
+	filterInput.Placeholder = "在当前结果里继续搜索"
+	filterInput.CharLimit = 64
+	filterInput.Width = 36
+	filterInput.Focus()
+
 	model := selectorTUIModel{
 		title:        fmt.Sprintf("片源: %s", sourceName),
-		subtitle:     "选择番剧，Esc 返回片源列表",
+		subtitle:     "输入关键字过滤当前结果，Enter 确认，Esc 返回片源列表",
 		emptyMessage: "当前片源没有可选番剧",
 		items:        items,
 		jumpValues:   jumpValues,
-		allowNumber:  true,
+		showOrdinal:  true,
+		allowFilter:  true,
+		filterInput:  filterInput,
 	}
 
 	result, err := runSelectorTUI(model)
@@ -60,7 +74,7 @@ func RunEpisodeSelectionTUI(animeName string, episodes []source.EpisodeGroup) (*
 	items := make([]string, len(episodes))
 	jumpValues := make([]string, len(episodes))
 	for i, episode := range episodes {
-		items[i] = episode.Label()
+		items[i] = episodeSelectionLabel(episode)
 		if episode.HasNumber && episode.Number != "" {
 			jumpValues[i] = normalizeDigitInput(episode.Number)
 		} else {
@@ -74,9 +88,10 @@ func RunEpisodeSelectionTUI(animeName string, episodes []source.EpisodeGroup) (*
 		emptyMessage: "当前番剧没有可选剧集",
 		items:        items,
 		jumpValues:   jumpValues,
+		showOrdinal:  false,
 		allowReverse: true,
 		allowNumber:  true,
-		reversed:     true,
+		reversed:     false,
 	}
 
 	result, err := runSelectorTUI(model)
@@ -87,8 +102,10 @@ func RunEpisodeSelectionTUI(animeName string, episodes []source.EpisodeGroup) (*
 	return &episodes[result.index], nil
 }
 
+// runSelectorTUI 统一启动列表类 TUI，避免番剧和剧集各自维护一套状态机。
 func runSelectorTUI(model selectorTUIModel) (*selectorTUIResult, error) {
-	program := tea.NewProgram(model, tea.WithAltScreen())
+	model.applyFilter()
+	program := newProgram(model)
 	finalModel, err := program.Run()
 	if err != nil {
 		return nil, err
@@ -122,7 +139,7 @@ func (m selectorTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "down", "j":
-			if m.selected < len(m.items)-1 {
+			if m.selected < m.filteredLen()-1 {
 				m.selected++
 			}
 			return m, nil
@@ -130,8 +147,8 @@ func (m selectorTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.selected = 0
 			return m, nil
 		case "end":
-			if len(m.items) > 0 {
-				m.selected = len(m.items) - 1
+			if m.filteredLen() > 0 {
+				m.selected = m.filteredLen() - 1
 			}
 			return m, nil
 		case "r":
@@ -142,13 +159,22 @@ func (m selectorTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "backspace":
+			if m.allowFilter {
+				before := m.filterInput.Value()
+				var cmd tea.Cmd
+				m.filterInput, cmd = m.filterInput.Update(msg)
+				if before != m.filterInput.Value() {
+					m.applyFilter()
+				}
+				return m, cmd
+			}
 			if m.allowNumber && m.numberBuffer != "" {
 				m.numberBuffer = m.numberBuffer[:len(m.numberBuffer)-1]
 				m.applyNumberBuffer()
 			}
 			return m, nil
 		case "enter":
-			if len(m.items) == 0 {
+			if m.filteredLen() == 0 {
 				return m, nil
 			}
 			if m.allowNumber && m.numberBuffer != "" {
@@ -156,6 +182,16 @@ func (m selectorTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.result = &selectorTUIResult{index: m.displayIndexToActual(m.selected)}
 			return m, tea.Quit
+		}
+
+		if m.allowFilter {
+			before := m.filterInput.Value()
+			var cmd tea.Cmd
+			m.filterInput, cmd = m.filterInput.Update(msg)
+			if before != m.filterInput.Value() {
+				m.applyFilter()
+				return m, cmd
+			}
 		}
 
 		if m.allowNumber && isDigits(msg.String()) {
@@ -185,6 +221,10 @@ func (m selectorTUIModel) View() string {
 		b.WriteString(tuiMutedStyle.Render("当前排序: " + order))
 		b.WriteString("\n")
 	}
+	if m.allowFilter {
+		b.WriteString(m.filterInput.View())
+		b.WriteString("\n")
+	}
 	if m.allowNumber {
 		jump := "未输入"
 		if m.numberBuffer != "" {
@@ -195,15 +235,22 @@ func (m selectorTUIModel) View() string {
 	}
 	b.WriteString("\n")
 
-	if len(m.items) == 0 {
+	if m.filteredLen() == 0 {
 		b.WriteString(tuiMutedStyle.Render(m.emptyMessage))
+		if m.allowFilter && strings.TrimSpace(m.filterInput.Value()) != "" {
+			b.WriteString("\n")
+			b.WriteString(tuiMutedStyle.Render("没有匹配项，继续修改过滤关键词试试"))
+		}
 		return b.String()
 	}
 
 	start, end := m.visibleRange()
 	for displayIndex := start; displayIndex < end; displayIndex++ {
 		actual := m.displayIndexToActual(displayIndex)
-		line := fmt.Sprintf("%s %d. %s", pointer(displayIndex == m.selected), displayIndex+1, m.items[actual])
+		line := fmt.Sprintf("%s %s", pointer(displayIndex == m.selected), m.items[actual])
+		if m.showOrdinal {
+			line = fmt.Sprintf("%s %d. %s", pointer(displayIndex == m.selected), displayIndex+1, m.items[actual])
+		}
 		if displayIndex == m.selected {
 			b.WriteString(tuiPickStyle.Render(line))
 		} else {
@@ -212,14 +259,15 @@ func (m selectorTUIModel) View() string {
 		b.WriteString("\n")
 	}
 
-	if end < len(m.items) {
-		b.WriteString(tuiMutedStyle.Render(fmt.Sprintf("... 还有 %d 项", len(m.items)-end)))
+	if end < m.filteredLen() {
+		b.WriteString(tuiMutedStyle.Render(fmt.Sprintf("... 还有 %d 项", m.filteredLen()-end)))
 		b.WriteString("\n")
 	}
 
 	return strings.TrimRight(b.String(), "\n")
 }
 
+// applyNumberBuffer 支持用户直接输入集数/序号跳转，并兼容倒序显示。
 func (m *selectorTUIModel) applyNumberBuffer() {
 	if m.numberBuffer == "" {
 		return
@@ -227,6 +275,9 @@ func (m *selectorTUIModel) applyNumberBuffer() {
 
 	normalized := normalizeDigitInput(m.numberBuffer)
 	for i, jumpValue := range m.jumpValues {
+		if !m.containsActualIndex(i) {
+			continue
+		}
 		if normalizeDigitInput(jumpValue) == normalized {
 			m.selected = m.actualToDisplayIndex(i)
 			return
@@ -234,25 +285,32 @@ func (m *selectorTUIModel) applyNumberBuffer() {
 	}
 
 	value, err := strconv.Atoi(normalized)
-	if err == nil && value >= 1 && value <= len(m.items) {
+	if err == nil && value >= 1 && value <= m.filteredLen() {
 		m.selected = value - 1
 	}
 }
 
+// displayIndexToActual / actualToDisplayIndex 负责在顺序和倒序视图之间映射真实索引。
 func (m selectorTUIModel) displayIndexToActual(displayIndex int) int {
-	if !m.reversed {
+	if len(m.filtered) == 0 {
 		return displayIndex
 	}
-	return len(m.items) - 1 - displayIndex
+	if !m.reversed {
+		return m.filtered[displayIndex]
+	}
+	return m.filtered[len(m.filtered)-1-displayIndex]
 }
 
 func (m selectorTUIModel) actualToDisplayIndex(actualIndex int) int {
-	if !m.reversed {
-		return actualIndex
+	for displayIndex := 0; displayIndex < len(m.filtered); displayIndex++ {
+		if m.displayIndexToActual(displayIndex) == actualIndex {
+			return displayIndex
+		}
 	}
-	return len(m.items) - 1 - actualIndex
+	return 0
 }
 
+// visibleRange 只渲染当前视窗附近的内容，避免长列表把终端刷满。
 func (m selectorTUIModel) visibleRange() (int, int) {
 	page := m.pageSize()
 	start := m.selected - page/2
@@ -260,8 +318,8 @@ func (m selectorTUIModel) visibleRange() (int, int) {
 		start = 0
 	}
 	end := start + page
-	if end > len(m.items) {
-		end = len(m.items)
+	if end > m.filteredLen() {
+		end = m.filteredLen()
 		start = end - page
 		if start < 0 {
 			start = 0
@@ -277,6 +335,7 @@ func (m selectorTUIModel) pageSize() int {
 	return m.windowHeight - 8
 }
 
+// isDigits 只允许集数跳转缓存接收数字键，避免和普通快捷键混在一起。
 func isDigits(value string) bool {
 	if value == "" {
 		return false
@@ -289,6 +348,7 @@ func isDigits(value string) bool {
 	return true
 }
 
+// normalizeDigitInput 让 01 / 1 / 1.0 这类输入跳到同一集。
 func normalizeDigitInput(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -298,4 +358,51 @@ func normalizeDigitInput(value string) string {
 		return strconv.FormatFloat(parsed, 'f', -1, 64)
 	}
 	return value
+}
+
+func (m *selectorTUIModel) applyFilter() {
+	m.filtered = m.filtered[:0]
+
+	query := strings.ToLower(strings.TrimSpace(m.filterInput.Value()))
+	for i, item := range m.items {
+		if query == "" || strings.Contains(strings.ToLower(item), query) {
+			m.filtered = append(m.filtered, i)
+		}
+	}
+
+	if len(m.filtered) == 0 {
+		m.selected = 0
+		return
+	}
+	if m.selected >= len(m.filtered) {
+		m.selected = len(m.filtered) - 1
+	}
+}
+
+func (m selectorTUIModel) filteredLen() int {
+	if len(m.filtered) == 0 {
+		return 0
+	}
+	return len(m.filtered)
+}
+
+func (m selectorTUIModel) containsActualIndex(actualIndex int) bool {
+	for _, idx := range m.filtered {
+		if idx == actualIndex {
+			return true
+		}
+	}
+	return false
+}
+
+// episodeSelectionLabel 让选集页优先展示真实集号，而不是再额外叠加一层列表编号。
+func episodeSelectionLabel(episode source.EpisodeGroup) string {
+	label := strings.TrimSpace(episode.Name)
+	if episode.HasNumber && strings.TrimSpace(episode.Number) != "" {
+		label = normalizeDigitInput(episode.Number)
+	}
+	if len(episode.Candidates) > 1 {
+		return fmt.Sprintf("%s  (%d 条线路)", label, len(episode.Candidates))
+	}
+	return label
 }

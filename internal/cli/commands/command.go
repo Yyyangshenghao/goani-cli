@@ -11,3 +11,8 @@ type Command interface {
 	// ShortDesc 返回简短描述（用于帮助列表）
 	ShortDesc() string
 }
+
+// HiddenCommand 用于标记不应该展示给普通用户的内部命令。
+type HiddenCommand interface {
+	Hidden() bool
+}

@@ -158,6 +158,63 @@ func (sm *SourceManager) Subscribe(url, name string) error {
 	return sm.saveLocked()
 }
 
+// UpsertSubscription 新增或更新订阅，并在保存前重新抓取订阅内容。
+// previousURL 为空表示新增；否则会把对应订阅更新为新的名称或 URL。
+func (sm *SourceManager) UpsertSubscription(previousURL, url, name string) error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	nextSubscriptions := cloneSubscriptions(sm.subscriptions)
+	targetIndex := -1
+
+	if previousURL != "" {
+		for i, sub := range nextSubscriptions {
+			if sub.URL == previousURL {
+				targetIndex = i
+				break
+			}
+		}
+		if targetIndex < 0 {
+			return fmt.Errorf("未找到要编辑的订阅")
+		}
+	}
+
+	for i, sub := range nextSubscriptions {
+		if sub.URL != url {
+			continue
+		}
+		if previousURL != "" && i == targetIndex {
+			continue
+		}
+		return fmt.Errorf("已订阅该源")
+	}
+
+	if name == "" {
+		name = "自定义源"
+	}
+
+	if previousURL == "" {
+		nextSubscriptions = append(nextSubscriptions, Subscription{
+			URL:       url,
+			Name:      name,
+			UpdatedAt: time.Now().Format("2006-01-02 15:04:05"),
+		})
+	} else {
+		nextSubscriptions[targetIndex].URL = url
+		nextSubscriptions[targetIndex].Name = name
+		nextSubscriptions[targetIndex].UpdatedAt = time.Now().Format("2006-01-02 15:04:05")
+	}
+
+	refreshedSubscriptions, sources, ok := sm.fetchSubscriptionsLocked(nextSubscriptions)
+	if !ok {
+		return fmt.Errorf("订阅验证失败，已保留原有配置")
+	}
+
+	sm.subscriptions = refreshedSubscriptions
+	sm.sources = sources
+	return sm.saveLocked()
+}
+
 // Unsubscribe 取消订阅
 func (sm *SourceManager) Unsubscribe(url string) error {
 	sm.mu.Lock()

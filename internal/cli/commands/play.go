@@ -6,7 +6,8 @@ import (
 
 	"github.com/Yyyangshenghao/goani-cli/internal/app"
 	"github.com/Yyyangshenghao/goani-cli/internal/source"
-	"github.com/Yyyangshenghao/goani-cli/internal/ui"
+	consoleui "github.com/Yyyangshenghao/goani-cli/internal/ui/console"
+	"github.com/Yyyangshenghao/goani-cli/internal/workflow"
 )
 
 func init() {
@@ -46,24 +47,24 @@ func (c *PlayCommand) Run(args []string) {
 	keyword := args[0]
 	src := application.GetFirstSource()
 	if src == nil {
-		ui.Error("未找到媒体源")
+		consoleui.Error("未找到媒体源")
 		os.Exit(1)
 	}
 
-	ui.Info("搜索: %s", keyword)
+	consoleui.Info("搜索: %s", keyword)
 	results, err := src.Search(keyword)
 	if err != nil {
-		ui.Error("搜索失败: %v", err)
+		consoleui.Error("搜索失败: %v", err)
 		os.Exit(1)
 	}
 
 	if len(results) == 0 {
-		ui.Info("未找到结果")
+		consoleui.Info("未找到结果")
 		return
 	}
 
 	// 选择动漫
-	idx, err := ui.Select("选择动漫", len(results), func(i int) string { return results[i].Name })
+	idx, err := consoleui.Select("选择动漫", len(results), func(i int) string { return results[i].Name })
 	if err != nil {
 		fmt.Println("已取消")
 		return
@@ -72,27 +73,27 @@ func (c *PlayCommand) Run(args []string) {
 	// 获取剧集
 	episodes, err := src.GetEpisodes(results[idx].URL)
 	if err != nil {
-		ui.Error("获取剧集失败: %v", err)
+		consoleui.Error("获取剧集失败: %v", err)
 		os.Exit(1)
 	}
 	groups := source.GroupEpisodes(episodes)
 	if len(groups) == 0 {
-		ui.Info("没有可用剧集")
+		consoleui.Info("没有可用剧集")
 		return
 	}
 
-	ui.Success("找到 %d 集", len(groups))
+	consoleui.Success("找到 %d 集", len(groups))
 
 	// 选择剧集
-	epIdx, err := ui.Select("选择剧集", len(groups), func(i int) string { return groups[i].Label() })
+	epIdx, err := consoleui.Select("选择剧集", len(groups), func(i int) string { return groups[i].Label() })
 	if err != nil {
 		fmt.Println("已取消")
 		return
 	}
 
 	// 播放
-	if err := playEpisodeGroupCLI(application, src, groups[epIdx]); err != nil {
-		ui.Error("%v", err)
+	if err := workflow.PlayEpisodeGroupCLI(application, src, groups[epIdx]); err != nil {
+		consoleui.Error("%v", err)
 		os.Exit(1)
 	}
 }

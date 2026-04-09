@@ -1,6 +1,32 @@
 package player
 
+import "strings"
+
 var supportedPlayers = []string{"mpv", "vlc", "potplayer", "iina"}
+
+// SupportedPlayers 返回当前内置支持的播放器列表副本。
+func SupportedPlayers() []string {
+	players := make([]string, len(supportedPlayers))
+	copy(players, supportedPlayers)
+	return players
+}
+
+// FirstConfiguredAvailablePlayer 从已配置路径中挑出第一个真实可用的播放器。
+// 它只检查配置里明确写过路径的播放器，不会把系统 PATH 中自动发现的播放器写回默认配置。
+func FirstConfiguredAvailablePlayer(paths map[string]string) Player {
+	for _, name := range supportedPlayers {
+		path := strings.TrimSpace(paths[name])
+		if path == "" {
+			continue
+		}
+
+		p := newPlayer(name, path)
+		if p != nil && p.IsAvailable() {
+			return p
+		}
+	}
+	return nil
+}
 
 // Manager 播放器管理器
 type Manager struct {

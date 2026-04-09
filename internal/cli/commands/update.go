@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Yyyangshenghao/goani-cli/internal/ui"
+	consoleui "github.com/Yyyangshenghao/goani-cli/internal/ui/console"
 	"github.com/Yyyangshenghao/goani-cli/internal/version"
 )
 
@@ -36,35 +36,35 @@ func (c *UpdateCommand) ShortDesc() string {
 
 // Run 执行命令
 func (c *UpdateCommand) Run(args []string) {
-	ui.Info("当前版本: %s", version.Short())
-	ui.Info("正在检查更新...")
+	consoleui.Info("当前版本: %s", version.Short())
+	consoleui.Info("正在检查更新...")
 
 	// 获取最新版本
 	latestVersion, err := c.getLatestVersion()
 	if err != nil {
-		ui.Error("检查更新失败: %v", err)
+		consoleui.Error("检查更新失败: %v", err)
 		os.Exit(1)
 	}
 
-	ui.Info("最新版本: %s", latestVersion)
+	consoleui.Info("最新版本: %s", latestVersion)
 
 	if version.Short() == latestVersion {
-		ui.Success("已是最新版本")
+		consoleui.Success("已是最新版本")
 		return
 	}
 
 	// 下载并安装
 	if err := c.install(latestVersion); err != nil {
-		ui.Error("更新失败: %v", err)
+		consoleui.Error("更新失败: %v", err)
 		os.Exit(1)
 	}
 
 	if runtime.GOOS == "windows" {
-		ui.Success("更新已启动，程序退出后会完成替换")
+		consoleui.Success("更新已启动，程序退出后会完成替换")
 	} else {
-		ui.Success("更新完成！")
+		consoleui.Success("更新完成！")
 	}
-	ui.Info("新版本: %s", latestVersion)
+	consoleui.Info("新版本: %s", latestVersion)
 }
 
 // getLatestVersion 获取最新版本号
@@ -108,7 +108,7 @@ func (c *UpdateCommand) install(ver string) error {
 	}
 
 	downloadURL := fmt.Sprintf("https://github.com/Yyyangshenghao/goani-cli/releases/download/%s/%s", ver, archiveName)
-	ui.Info("下载地址: %s", downloadURL)
+	consoleui.Info("下载地址: %s", downloadURL)
 
 	tempDir, err := os.MkdirTemp("", "goani-update-*")
 	if err != nil {
@@ -125,7 +125,7 @@ func (c *UpdateCommand) install(ver string) error {
 	}
 
 	// 解压
-	ui.Info("正在解压...")
+	consoleui.Info("正在解压...")
 	if goos == "windows" {
 		return c.installWindows(tmpFile, tempDir, binaryName)
 	}

@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/Yyyangshenghao/goani-cli/internal/app"
-	"github.com/Yyyangshenghao/goani-cli/internal/ui"
+	consoleui "github.com/Yyyangshenghao/goani-cli/internal/ui/console"
 )
 
 func init() {
@@ -63,7 +63,7 @@ func (c *SourceCommand) listSources() {
 	sources := application.SourceManager.GetAll()
 	subs := application.SourceManager.GetSubscriptions()
 
-	ui.Info("共 %d 个媒体源", len(sources))
+	consoleui.Info("共 %d 个媒体源", len(sources))
 	fmt.Println()
 
 	for i, s := range sources {
@@ -72,7 +72,7 @@ func (c *SourceCommand) listSources() {
 
 	if len(subs) > 0 {
 		fmt.Println()
-		ui.Info("订阅列表:")
+		consoleui.Info("订阅列表:")
 		for i, sub := range subs {
 			fmt.Printf("  %d. %s (%s)\n", i+1, sub.Name, sub.URL)
 			fmt.Printf("     更新时间: %s\n", sub.UpdatedAt)
@@ -92,15 +92,15 @@ func (c *SourceCommand) subscribe(args []string) {
 		name = args[1]
 	}
 
-	ui.Info("正在订阅: %s", url)
+	consoleui.Info("正在订阅: %s", url)
 
 	application := c.ensureApp()
 	if err := application.SourceManager.Subscribe(url, name); err != nil {
-		ui.Error("订阅失败: %v", err)
+		consoleui.Error("订阅失败: %v", err)
 		return
 	}
 
-	ui.Success("订阅成功！当前共 %d 个媒体源", application.SourceManager.Count())
+	consoleui.Success("订阅成功！当前共 %d 个媒体源", application.SourceManager.Count())
 }
 
 func (c *SourceCommand) unsubscribe(args []string) {
@@ -112,32 +112,32 @@ func (c *SourceCommand) unsubscribe(args []string) {
 	url := args[0]
 
 	if err := c.ensureApp().SourceManager.Unsubscribe(url); err != nil {
-		ui.Error("取消订阅失败: %v", err)
+		consoleui.Error("取消订阅失败: %v", err)
 		return
 	}
 
-	ui.Success("已取消订阅")
+	consoleui.Success("已取消订阅")
 }
 
 func (c *SourceCommand) refresh() {
-	ui.Info("正在刷新订阅...")
+	consoleui.Info("正在刷新订阅...")
 
 	application := c.ensureApp()
 	if err := application.SourceManager.Refresh(); err != nil {
-		ui.Error("刷新失败: %v", err)
+		consoleui.Error("刷新失败: %v", err)
 		return
 	}
 
-	ui.Success("刷新完成！当前共 %d 个媒体源", application.SourceManager.Count())
+	consoleui.Success("刷新完成！当前共 %d 个媒体源", application.SourceManager.Count())
 }
 
 func (c *SourceCommand) reset() {
 	if err := c.ensureApp().SourceManager.Reset(); err != nil {
-		ui.Error("重置失败: %v", err)
+		consoleui.Error("重置失败: %v", err)
 		return
 	}
 
-	ui.Success("已重置为默认媒体源")
+	consoleui.Success("已重置为默认媒体源")
 }
 
 // Usage 返回使用说明

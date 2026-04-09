@@ -1,4 +1,4 @@
-package ui
+package tui
 
 import (
 	"strings"
@@ -20,7 +20,7 @@ func RunTextTUI(title, content string) error {
 		title: title,
 		lines: strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n"),
 	}
-	program := tea.NewProgram(model, tea.WithAltScreen())
+	program := newProgram(model)
 	_, err := program.Run()
 	return err
 }

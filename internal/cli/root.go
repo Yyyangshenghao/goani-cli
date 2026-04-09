@@ -83,6 +83,9 @@ func printUsage(cmds map[string]commands.Command) {
 	sort.Strings(names)
 	for _, name := range names {
 		cmd := cmds[name]
+		if hidden, ok := cmd.(commands.HiddenCommand); ok && hidden.Hidden() {
+			continue
+		}
 		fmt.Printf("  %-10s %s\n", name, cmd.ShortDesc())
 	}
 	fmt.Println()

@@ -1,6 +1,9 @@
 package app
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/Yyyangshenghao/goani-cli/internal/player"
 	"github.com/Yyyangshenghao/goani-cli/internal/settings"
 	"github.com/Yyyangshenghao/goani-cli/internal/source"
@@ -51,10 +54,20 @@ func (a *App) GetSourceByName(name string) *webselector.WebSelectorSource {
 	return webselector.New(*ms)
 }
 
-// GetPlayer 获取配置的播放器
-func (a *App) GetPlayer() player.Player {
+// GetPlayer 获取播放时应使用的播放器。
+// 如果当前没有默认播放器，会优先从已配置路径里挑一个可用播放器并写回配置。
+func (a *App) GetPlayer() (player.Player, error) {
+	if strings.TrimSpace(a.PlayerConfig.DefaultPlayer) == "" {
+		if configured := player.FirstConfiguredAvailablePlayer(a.PlayerConfig.Paths); configured != nil {
+			a.PlayerConfig.SetDefaultPlayer(configured.Name())
+			if err := a.SaveConfig(); err != nil {
+				return nil, fmt.Errorf("已找到可用播放器 %s，但保存默认播放器失败: %w", configured.Name(), err)
+			}
+		}
+	}
+
 	pm := player.NewManagerWithConfig(a.PlayerConfig.DefaultPlayer, a.PlayerConfig.Paths)
-	return pm.GetFirst()
+	return pm.GetFirst(), nil
 }
 
 // SaveConfig 保存配置

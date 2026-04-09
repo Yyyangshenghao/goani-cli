@@ -1,4 +1,4 @@
-package ui
+package tui
 
 import (
 	"fmt"
@@ -13,7 +13,7 @@ type MainMenuAction string
 const (
 	MainMenuActionSearch     MainMenuAction = "search"
 	MainMenuActionSourceList MainMenuAction = "source_list"
-	MainMenuActionConfigHelp MainMenuAction = "config_help"
+	MainMenuActionConfig     MainMenuAction = "config"
 	MainMenuActionVersion    MainMenuAction = "version"
 	MainMenuActionQuit       MainMenuAction = "quit"
 )
@@ -33,7 +33,7 @@ type mainTUIModel struct {
 // RunMainTUI 运行主入口菜单
 func RunMainTUI() (MainMenuAction, error) {
 	model := newMainTUIModel()
-	program := tea.NewProgram(model, tea.WithAltScreen())
+	program := newProgram(model)
 	finalModel, err := program.Run()
 	if err != nil {
 		return MainMenuActionQuit, err
@@ -63,9 +63,9 @@ func newMainTUIModel() mainTUIModel {
 				action:      MainMenuActionSourceList,
 			},
 			{
-				title:       "配置说明",
-				description: "查看播放器配置和 config.json 的说明",
-				action:      MainMenuActionConfigHelp,
+				title:       "配置",
+				description: "查看播放器、订阅源，并可直接打开 config.json",
+				action:      MainMenuActionConfig,
 			},
 			{
 				title:       "版本信息",

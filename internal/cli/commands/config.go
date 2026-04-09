@@ -7,7 +7,7 @@ import (
 	"github.com/Yyyangshenghao/goani-cli/internal/app"
 	"github.com/Yyyangshenghao/goani-cli/internal/player"
 	"github.com/Yyyangshenghao/goani-cli/internal/settings"
-	"github.com/Yyyangshenghao/goani-cli/internal/ui"
+	consoleui "github.com/Yyyangshenghao/goani-cli/internal/ui/console"
 )
 
 func init() {
@@ -60,18 +60,18 @@ func (c *ConfigCommand) setPlayerPath(args []string) {
 	name := args[0]
 	path := args[1]
 	if !player.IsSupportedPlayer(name) {
-		ui.Error("不支持的播放器: %s", name)
+		consoleui.Error("不支持的播放器: %s", name)
 		os.Exit(1)
 	}
 
 	application := c.ensureApp()
 	application.PlayerConfig.SetPlayer(name, path)
 	if err := application.SaveConfig(); err != nil {
-		ui.Error("保存配置失败: %v", err)
+		consoleui.Error("保存配置失败: %v", err)
 		os.Exit(1)
 	}
 
-	ui.Success("已配置播放器: %s", name)
+	consoleui.Success("已配置播放器: %s", name)
 }
 
 func (c *ConfigCommand) setDefaultPlayer(args []string) {
@@ -82,18 +82,18 @@ func (c *ConfigCommand) setDefaultPlayer(args []string) {
 
 	name := args[0]
 	if !player.IsSupportedPlayer(name) {
-		ui.Error("不支持的播放器: %s", name)
+		consoleui.Error("不支持的播放器: %s", name)
 		os.Exit(1)
 	}
 
 	application := c.ensureApp()
 	application.PlayerConfig.SetDefaultPlayer(name)
 	if err := application.SaveConfig(); err != nil {
-		ui.Error("保存配置失败: %v", err)
+		consoleui.Error("保存配置失败: %v", err)
 		os.Exit(1)
 	}
 
-	ui.Success("已设置默认播放器: %s", name)
+	consoleui.Success("已设置默认播放器: %s", name)
 }
 
 // Usage 返回使用说明

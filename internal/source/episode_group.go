@@ -70,6 +70,7 @@ func GroupEpisodes(episodes []Episode) []EpisodeGroup {
 	return groups
 }
 
+// episodeGroupKey 优先按解析出的集数归类；只有拿不到数字时才退回标题归类。
 func episodeGroupKey(episode Episode) string {
 	if episode.HasNumber && episode.Number != "" {
 		return "n:" + normalizeNumberString(episode.Number)
@@ -77,6 +78,7 @@ func episodeGroupKey(episode Episode) string {
 	return "t:" + normalizeEpisodeText(episode.Name)
 }
 
+// normalizeEpisodeText 用于兜底的纯文本归类，尽量消掉大小写和空白差异。
 func normalizeEpisodeText(name string) string {
 	name = strings.ToLower(strings.TrimSpace(name))
 	name = strings.ReplaceAll(name, " ", "")
@@ -85,6 +87,7 @@ func normalizeEpisodeText(name string) string {
 	return name
 }
 
+// normalizeNumberString 把 01、1、1.0 这类写法收敛成统一数字表示。
 func normalizeNumberString(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -96,6 +99,7 @@ func normalizeNumberString(value string) string {
 	return value
 }
 
+// betterEpisodeName 在多条线路合并后，尽量保留信息更完整的显示名称。
 func betterEpisodeName(current, candidate string) string {
 	current = strings.TrimSpace(current)
 	candidate = strings.TrimSpace(candidate)
@@ -117,6 +121,7 @@ func betterEpisodeName(current, candidate string) string {
 	return current
 }
 
+// episodeNameScore 用简单打分判断哪种剧集标题更适合展示给用户。
 func episodeNameScore(name string) int {
 	score := 0
 	if strings.Contains(name, "第") {

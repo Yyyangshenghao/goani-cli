@@ -45,7 +45,7 @@ func (p *PotPlayer) Play(url string) error {
 
 // PlayWithArgs 带参数播放
 func (p *PotPlayer) PlayWithArgs(url string, args []string) error {
-	cmdArgs := append([]string{url}, args...)
+	cmdArgs := append(append([]string{}, args...), url)
 	cmd := exec.Command(p.path, cmdArgs...)
 	return cmd.Start()
 }

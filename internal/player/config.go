@@ -46,6 +46,14 @@ func (c *Config) SetPlayer(name, path string) {
 	c.DefaultPlayer = name
 }
 
+// SetPlayerPath 仅更新播放器路径，不会隐式修改默认播放器。
+func (c *Config) SetPlayerPath(name, path string) {
+	if c.Paths == nil {
+		c.Paths = map[string]string{}
+	}
+	c.Paths[name] = path
+}
+
 // SetDefaultPlayer 设置默认播放器
 func (c *Config) SetDefaultPlayer(name string) {
 	c.DefaultPlayer = name
