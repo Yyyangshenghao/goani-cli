@@ -10,12 +10,19 @@ import (
 )
 
 func init() {
-	Register(&ConfigCommand{app: app.New()})
+	Register(&ConfigCommand{})
 }
 
 // ConfigCommand 配置命令
 type ConfigCommand struct {
 	app *app.App
+}
+
+func (c *ConfigCommand) ensureApp() *app.App {
+	if c.app == nil {
+		c.app = app.New()
+	}
+	return c.app
 }
 
 // Name 返回命令名称
@@ -56,8 +63,9 @@ func (c *ConfigCommand) setPlayerPath(args []string) {
 		os.Exit(1)
 	}
 
-	c.app.PlayerConfig.SetPlayer(name, path)
-	if err := c.app.SaveConfig(); err != nil {
+	application := c.ensureApp()
+	application.PlayerConfig.SetPlayer(name, path)
+	if err := application.SaveConfig(); err != nil {
 		ui.Error("保存配置失败: %v", err)
 		os.Exit(1)
 	}
@@ -77,8 +85,9 @@ func (c *ConfigCommand) setDefaultPlayer(args []string) {
 		os.Exit(1)
 	}
 
-	c.app.PlayerConfig.SetDefaultPlayer(name)
-	if err := c.app.SaveConfig(); err != nil {
+	application := c.ensureApp()
+	application.PlayerConfig.SetDefaultPlayer(name)
+	if err := application.SaveConfig(); err != nil {
 		ui.Error("保存配置失败: %v", err)
 		os.Exit(1)
 	}

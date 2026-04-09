@@ -9,12 +9,19 @@ import (
 )
 
 func init() {
-	Register(&PlayCommand{app: app.New()})
+	Register(&PlayCommand{})
 }
 
 // PlayCommand 播放命令
 type PlayCommand struct {
 	app *app.App
+}
+
+func (c *PlayCommand) ensureApp() *app.App {
+	if c.app == nil {
+		c.app = app.New()
+	}
+	return c.app
 }
 
 // Name 返回命令名称
@@ -34,8 +41,9 @@ func (c *PlayCommand) Run(args []string) {
 		os.Exit(1)
 	}
 
+	application := c.ensureApp()
 	keyword := args[0]
-	src := c.app.GetFirstSource()
+	src := application.GetFirstSource()
 	if src == nil {
 		ui.Error("未找到媒体源")
 		os.Exit(1)
@@ -77,7 +85,7 @@ func (c *PlayCommand) Run(args []string) {
 	}
 
 	// 播放
-	playEpisode(c.app, episodes[epIdx].URL)
+	playEpisode(application, episodes[epIdx].URL)
 }
 
 // Usage 返回使用说明

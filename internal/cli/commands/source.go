@@ -8,12 +8,19 @@ import (
 )
 
 func init() {
-	Register(&SourceCommand{app: app.New()})
+	Register(&SourceCommand{})
 }
 
 // SourceCommand 媒体源命令
 type SourceCommand struct {
 	app *app.App
+}
+
+func (c *SourceCommand) ensureApp() *app.App {
+	if c.app == nil {
+		c.app = app.New()
+	}
+	return c.app
 }
 
 // Name 返回命令名称
@@ -52,8 +59,9 @@ func (c *SourceCommand) Run(args []string) {
 }
 
 func (c *SourceCommand) listSources() {
-	sources := c.app.SourceManager.GetAll()
-	subs := c.app.SourceManager.GetSubscriptions()
+	application := c.ensureApp()
+	sources := application.SourceManager.GetAll()
+	subs := application.SourceManager.GetSubscriptions()
 
 	ui.Info("共 %d 个媒体源", len(sources))
 	fmt.Println()
@@ -86,12 +94,13 @@ func (c *SourceCommand) subscribe(args []string) {
 
 	ui.Info("正在订阅: %s", url)
 
-	if err := c.app.SourceManager.Subscribe(url, name); err != nil {
+	application := c.ensureApp()
+	if err := application.SourceManager.Subscribe(url, name); err != nil {
 		ui.Error("订阅失败: %v", err)
 		return
 	}
 
-	ui.Success("订阅成功！当前共 %d 个媒体源", c.app.SourceManager.Count())
+	ui.Success("订阅成功！当前共 %d 个媒体源", application.SourceManager.Count())
 }
 
 func (c *SourceCommand) unsubscribe(args []string) {
@@ -102,7 +111,7 @@ func (c *SourceCommand) unsubscribe(args []string) {
 
 	url := args[0]
 
-	if err := c.app.SourceManager.Unsubscribe(url); err != nil {
+	if err := c.ensureApp().SourceManager.Unsubscribe(url); err != nil {
 		ui.Error("取消订阅失败: %v", err)
 		return
 	}
@@ -113,16 +122,17 @@ func (c *SourceCommand) unsubscribe(args []string) {
 func (c *SourceCommand) refresh() {
 	ui.Info("正在刷新订阅...")
 
-	if err := c.app.SourceManager.Refresh(); err != nil {
+	application := c.ensureApp()
+	if err := application.SourceManager.Refresh(); err != nil {
 		ui.Error("刷新失败: %v", err)
 		return
 	}
 
-	ui.Success("刷新完成！当前共 %d 个媒体源", c.app.SourceManager.Count())
+	ui.Success("刷新完成！当前共 %d 个媒体源", application.SourceManager.Count())
 }
 
 func (c *SourceCommand) reset() {
-	if err := c.app.SourceManager.Reset(); err != nil {
+	if err := c.ensureApp().SourceManager.Reset(); err != nil {
 		ui.Error("重置失败: %v", err)
 		return
 	}

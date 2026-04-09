@@ -12,12 +12,19 @@ import (
 )
 
 func init() {
-	Register(&SearchCommand{app: app.New()})
+	Register(&SearchCommand{})
 }
 
 // SearchCommand 搜索命令
 type SearchCommand struct {
 	app *app.App
+}
+
+func (c *SearchCommand) ensureApp() *app.App {
+	if c.app == nil {
+		c.app = app.New()
+	}
+	return c.app
 }
 
 // Name 返回命令名称
@@ -37,8 +44,9 @@ func (c *SearchCommand) Run(args []string) {
 		os.Exit(1)
 	}
 
+	application := c.ensureApp()
 	keyword := args[0]
-	totalSources := c.app.SourceManager.Count()
+	totalSources := application.SourceManager.Count()
 	if totalSources == 0 {
 		ui.Error("未找到媒体源")
 		os.Exit(1)
@@ -48,7 +56,7 @@ func (c *SearchCommand) Run(args []string) {
 	searchUI := ui.NewSearchUI(keyword, totalSources)
 
 	// 启动并发搜索
-	resultChan := c.app.SearchAll(keyword)
+	resultChan := application.SearchAll(keyword)
 
 	// 用于通知用户输入监听器退出
 	var wg sync.WaitGroup
@@ -116,7 +124,7 @@ loop:
 	// 显示选中源的结果
 	selectedResult := success[selectedIndex]
 	ui.Success("已选择: %s", selectedResult.SourceName)
-	showAnimeListAndSelect(c.app, selectedResult.Results, selectedResult.SourceName)
+	showAnimeListAndSelect(application, selectedResult.Results, selectedResult.SourceName)
 }
 
 // Usage 返回使用说明
