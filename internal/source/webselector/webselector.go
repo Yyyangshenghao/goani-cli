@@ -2,6 +2,7 @@ package webselector
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/Yyyangshenghao/goani-cli/internal/source"
 )
@@ -16,7 +17,9 @@ type WebSelectorSource struct {
 func New(config source.MediaSource) *WebSelectorSource {
 	return &WebSelectorSource{
 		config: config,
-		client: &http.Client{},
+		client: &http.Client{
+			Timeout: 10 * time.Second,
+		},
 	}
 }
 
