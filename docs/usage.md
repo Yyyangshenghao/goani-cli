@@ -1,15 +1,11 @@
 # 使用指南
 
-## 目录
+## 先看这一段
 
-- [命令概览](#命令概览)
-- [配置播放器](#配置播放器)
-- [搜索动漫](#搜索动漫)
-- [播放动漫](#播放动漫)
-- [媒体源管理](#媒体源管理)
-- [更新程序](#更新程序)
-- [其他命令](#其他命令)
-- [配置文件](#配置文件)
+- `goani` 默认显示帮助，不会直接进入 TUI。
+- `goani tui` 是推荐的交互入口。
+- `goani search` 和 `goani play` 继续保留，适合熟悉 CLI 的用户。
+- 所有配置最终都写进 `config.json`。
 
 ---
 
@@ -21,68 +17,88 @@ goani <command> [arguments]
 
 | 命令 | 说明 |
 |------|------|
+| `tui` | 进入主 TUI |
 | `search` | 搜索动漫 |
-| `tui` | 进入交互式 TUI 模式 |
 | `play` | 搜索并播放动漫 |
 | `source` | 管理媒体源订阅 |
-| `config` | 配置播放器 |
-| `update` | 更新到最新版本 |
-| `version` | 显示版本信息 |
+| `config` | 管理播放器和配置文件 |
+| `update` | 更新程序 |
+| `version` | 查看版本信息 |
+
+如果你不确定从哪里开始，先运行 `goani tui`。
+
+---
+
+## TUI 流程
+
+`goani tui` 会进入主界面，里面可以继续进入搜索、媒体源、配置和版本信息。
+
+当前的搜索流程是：
+
+1. 在搜索页输入关键词。
+2. 从实时搜索结果里选择一个片源。
+3. 在番剧列表里继续筛选，支持本地二次过滤。
+4. 进入选集页查看剧集。
+5. 选择线路页，查看解析出的直链、格式和清晰度。
+6. 进入播放页，确认播放器和当前线路。
+7. 在配置页管理播放器和订阅源。
+
+常用操作：
+
+- `Esc` 返回上一页
+- `Ctrl+C` 退出当前界面
+- 番剧列表支持本地过滤，不会重新请求网络
+- 选集页支持 `r` 切换顺序和倒序
+- 选集页支持直接输入数字跳转到对应集数
+- 线路解析页面会先显示加载页，整体等待时间最多 5 秒
 
 ---
 
 ## 配置播放器
 
-首次使用建议先配置播放器。现在播放器配置会统一写入 `config.json`，支持保存多个播放器路径，并指定默认播放器。
+播放器配置统一保存在 `config.json`。
+
+建议先通过 TUI 配置：
+
+1. 进入 `goani tui`
+2. 打开 `配置`
+3. 选择 `播放器`
+4. 输入播放器路径并保存
+5. 需要时再把某个播放器设为默认播放器
+
+如果你更喜欢命令行，也可以直接使用：
 
 ### Windows
 
 ```powershell
-# mpv
 goani config player mpv "D:\MPV播放器\mpv.exe"
-
-# VLC
 goani config player vlc "C:\Program Files\VideoLAN\VLC\vlc.exe"
-
-# PotPlayer
 goani config player potplayer "C:\Program Files\DAUM\PotPlayer\PotPlayerMini64.exe"
-
-# 设置默认播放器
 goani config player default mpv
 ```
 
 ### macOS
 
 ```bash
-# IINA（推荐）
 goani config player iina "/Applications/IINA.app/Contents/MacOS/iina-cli"
-
-# mpv
 goani config player mpv "/usr/local/bin/mpv"
-
-# VLC
 goani config player vlc "/Applications/VLC.app/Contents/MacOS/VLC"
-
-# 设置默认播放器
 goani config player default iina
 ```
 
 ### Linux
 
 ```bash
-# mpv
 goani config player mpv "/usr/bin/mpv"
-
-# VLC
 goani config player vlc "/usr/bin/vlc"
-
-# 设置默认播放器
 goani config player default mpv
 ```
 
 说明：
-- `goani config player <name> <path>` 会保存该播放器路径，并把它设为默认播放器
-- `goani config player default <name>` 只切换默认播放器，不改路径
+
+- `goani config player <name> <path>` 只保存播放器路径，不会自动修改默认播放器。
+- `goani config player default <name>` 只设置默认播放器，不会改路径。
+- 如果默认播放器为空，播放时会先从已配置路径里挑一个可用播放器，并把它写回默认播放器。
 
 ---
 
@@ -93,17 +109,17 @@ goani search <关键词>
 ```
 
 示例：
+
 ```bash
 goani search 葬送的芙莉莲
 goani search 进击的巨人
 ```
 
-搜索后会显示结果列表，选择后可查看剧集并播放。
+经典搜索流程会列出片源，然后进入番剧列表、选集和播放。
 
-### 实时搜索（TUI）
+### 实时搜索
 
 ```bash
-goani tui [关键词]
 goani search --interactive [关键词]
 goani search -i [关键词]
 ```
@@ -111,22 +127,17 @@ goani search -i [关键词]
 示例：
 
 ```bash
-goani tui 葬送的芙莉莲
-goani tui
 goani search --interactive 葬送的芙莉莲
 goani search -i
 ```
 
 说明：
-- `goani tui` 是推荐的完整 TUI 入口，首页可查看搜索、媒体源、配置说明和版本信息
-- 支持交互式终端时，会进入实时搜索 TUI
-- `goani search --interactive` / `-i` 作为兼容入口继续保留
-- `goani tui` 在不支持 TUI 的终端中会直接提示改用经典 CLI
-- `goani search --interactive` 在不支持 TUI 的终端中会自动回退到普通搜索模式
-- 在 TUI 中可直接输入关键词，支持上下选择片源并回车确认
-- 进入番剧页后可继续用 TUI 选择番剧和剧集
-- 选集页支持 `r` 切换顺序/倒序，直接输入数字跳到对应集数
-- `Esc` 会按层级返回上一页，`Ctrl+C` 可直接退出当前界面
+
+- 这是兼容入口，功能上和 TUI 搜索相连。
+- 在片源结果页可以继续选择结果。
+- 在番剧列表里支持本地二次过滤，方便再次缩小范围。
+- 在选集页可以按顺序或倒序浏览。
+- 线路解析会显示加载页，不会长时间卡在原界面。
 
 ---
 
@@ -137,11 +148,14 @@ goani play <关键词>
 ```
 
 示例：
+
 ```bash
 goani play 葬送的芙莉莲
 ```
 
-这是推荐的用法，搜索、选集、播放一气呵成。
+`play` 适合想快速从搜索走到播放的场景。它会复用搜索、选集和线路 fallback 逻辑。
+
+对于 `PotPlayer + m3u8`，`goani` 可能会先启动本地 HLS 代理，再把本地地址交给播放器，这是兼容行为。
 
 ---
 
@@ -160,6 +174,7 @@ goani source sub <url> [名称]
 ```
 
 示例：
+
 ```bash
 goani source sub https://example.com/sources.json 我的订阅
 ```
@@ -171,8 +186,6 @@ goani source unsub <url>
 ```
 
 ### 刷新订阅
-
-从所有订阅地址重新获取最新的媒体源：
 
 ```bash
 goani source refresh
@@ -188,17 +201,13 @@ goani source reset
 
 ## 更新程序
 
-自动检查并更新到最新版本：
-
 ```bash
 goani update
 ```
 
 ---
 
-## 其他命令
-
-### 查看版本
+## 查看版本
 
 ```bash
 goani version
@@ -209,24 +218,28 @@ goani version
 ## 配置文件
 
 配置文件位置：
+
 - Windows: `%USERPROFILE%\.goani\config.json`
 - macOS/Linux: `~/.goani/config.json`
 
-`config.json` 里会保存播放器路径、默认播放器和片源订阅地址。
+`config.json` 里保存三类内容：
 
-媒体源缓存：
+- 播放器路径
+- 默认播放器
+- 片源订阅
+
+同目录下还有一个缓存文件：
+
 - Windows: `%USERPROFILE%\.goani\sources_cache.json`
 - macOS/Linux: `~/.goani/sources_cache.json`
 
-`sources_cache.json` 只保存拉取下来的片源缓存数据。
+这个缓存文件只存运行时拉取到的媒体源缓存，不是主配置。
 
-### 更换播放器
+### 直接打开配置文件
 
-重新运行 config 命令即可覆盖之前的配置：
+在 TUI 里进入 `配置`，再选择 `打开 config.json`，可以直接用系统默认编辑器打开配置文件。
 
-```bash
-goani config player vlc "/path/to/vlc"
-```
+如果你习惯直接编辑 JSON，也可以手动修改后再运行 `goani source refresh` 或重新启动程序。
 
 ### 配置示例
 

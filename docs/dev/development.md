@@ -1,22 +1,40 @@
 # 开发指南
 
+这份文档面向维护者，记录当前项目结构、构建方式、测试方式和一些约定。
+
+它不是用户说明书。面向用户的内容请看 [usage.md](../usage.md)。
+
+---
+
 ## 项目结构
 
-```
+```text
 goani-cli/
-├── cmd/goani/          # 程序入口
+├── cmd/
+│   ├── goani/          # 主程序入口
+│   └── goani-debug-*/  # 手动调试工具
 ├── internal/
-│   ├── app/            # 应用核心
-│   ├── cli/            # CLI 框架
-│   │   └── commands/   # 命令实现
-│   ├── player/         # 播放器接口与配置
-│   ├── source/         # 媒体源接口与管理
-│   │   └── webselector/ # Web 抓取实现
-│   ├── ui/             # 终端交互
-│   └── version/        # 版本管理
-├── docs/               # 文档
-└── test/               # 测试
+│   ├── app/            # 应用编排
+│   ├── cli/            # 命令入口与注册
+│   │   └── commands/   # 具体命令实现
+│   ├── player/         # 播放器、配置和 HLS 代理
+│   ├── source/         # 媒体源模型、订阅、归类和抓取
+│   │   └── webselector/ # 站点解析实现
+│   ├── ui/
+│   │   ├── console/    # 传统终端交互
+│   │   └── tui/        # Bubble Tea TUI 页面
+│   └── version/        # 版本信息
+├── internal/workflow/  # 搜索、播放、配置等跨层流程
+└── docs/               # 用户文档和开发文档
 ```
+
+当前比较重要的拆分点是：
+
+- `internal/ui/console` 负责传统命令行交互。
+- `internal/ui/tui` 负责 TUI 页面。
+- `internal/player/hlsproxy.go` 负责 `m3u8` 本地代理兼容层。
+- `internal/source/episode_group.go` 负责剧集归类和重复线路合并。
+- `internal/cli/commands` 尽量只保留命令入口，跨层流程已经开始下沉到 `internal/workflow`。
 
 ---
 
@@ -25,19 +43,15 @@ goani-cli/
 ### 前置要求
 
 - Go 1.22+
-- 如果使用 `make`，需要 GNU Make 和 Bash 兼容环境；Windows 下建议使用 Git Bash、WSL，或直接使用下面的 `go build` / `go run` 命令
+- 如果使用 `make`，需要 GNU Make 和 Bash 兼容环境
 
-### 克隆并构建
+### 本地构建
 
 ```bash
-git clone https://github.com/Yyyangshenghao/goani-cli.git
-cd goani-cli
-
-# 构建当前平台
 go build -o goani ./cmd/goani
 ```
 
-Windows PowerShell 可直接使用：
+Windows PowerShell：
 
 ```powershell
 go build -o goani.exe .\cmd\goani
@@ -46,16 +60,15 @@ go build -o goani.exe .\cmd\goani
 ### 使用 Makefile
 
 ```bash
-make build       # 构建当前平台
-make build-all   # 构建所有平台
-make test        # 运行测试
-make install     # 安装到 GOPATH
+make build
+make build-all
+make test
+make install
 ```
 
 ### 版本信息注入
 
 ```bash
-# 构建时注入版本信息
 go build -ldflags="-s -w \
   -X github.com/Yyyangshenghao/goani-cli/internal/version.Version=v0.1.0 \
   -X github.com/Yyyangshenghao/goani-cli/internal/version.GitCommit=$(git rev-parse --short HEAD) \
@@ -63,7 +76,7 @@ go build -ldflags="-s -w \
   -o goani ./cmd/goani
 ```
 
-Windows PowerShell 示例：
+PowerShell 示例：
 
 ```powershell
 $version = "v0.1.0"
@@ -77,82 +90,106 @@ go build -ldflags "-s -w -X github.com/Yyyangshenghao/goani-cli/internal/version
 
 ## 测试
 
-```bash
-# 核心功能测试（搜索、剧集、视频链接）
-go run test/source/main.go
+### 自动化测试
 
-# 播放器测试
-go run test/player/player.go
+真实的 Go 单元测试应放在被测包旁边，文件名以 `*_test.go` 结尾。当前已经在这些位置放了测试：
+
+- `internal/player/hlsproxy_test.go`
+- `internal/source/episode_group_test.go`
+
+统一运行：
+
+```bash
+go test ./...
 ```
+
+### 手动调试入口
+
+手动 smoke 工具现在放在 `cmd/goani-debug-*` 下，它们是开发辅助程序，不是 `go test` 识别的测试文件。
+
+例如：
+
+```bash
+go run .\cmd\goani-debug-source
+go run .\cmd\goani-debug-player
+go run .\cmd\goani-debug-potplayer
+```
+
+这类程序适合做本地验证、播放器探针和临时排查。后续如果再增加，优先保持“开发工具”定位，不要把它们当成自动测试。
 
 ---
 
-## 架构设计
+## 架构说明
 
-相关开发文档：
+### 当前命令模型
 
-- [命令与交互设计](./command.md)
+- `goani` 默认显示帮助
+- `goani tui` 进入主 TUI
+- `goani search`、`goani play`、`goani source`、`goani config` 继续作为显式 CLI 入口
+- `proxy-hls` 是内部隐藏命令，只给播放器兼容层使用，不对普通用户展示
 
-### 接口设计
+### 命令与编排
 
-项目采用接口驱动设计，核心接口包括：
+命令层应该尽量薄，负责：
 
-**媒体源接口** (`internal/source/source.go`)
-```go
-type Source interface {
-    Name() string
-    Search(keyword string) ([]Anime, error)
-    GetEpisodes(animeURL string) ([]Episode, error)
-    GetVideoURL(episodeURL string) (string, error)
-}
-```
+- 解析参数
+- 调用应用编排
+- 将状态交给 TUI 或 CLI 输出
 
-**播放器接口** (`internal/player/player.go`)
-```go
-type Player interface {
-    Name() string
-    Play(url string) error
-    IsAvailable() bool
-}
-```
+复杂流程尽量放在应用层或专门的流程函数里，例如：
 
-**命令接口** (`internal/cli/commands/command.go`)
-```go
-type Command interface {
-    Name() string
-    Run(args []string)
-    Usage() string
-    ShortDesc() string
-}
-```
+- 搜索后串起选番、选集、线路选择和播放
+- 配置页的保存回调
+- `PotPlayer + m3u8` 的本地代理播放
 
-### 命令注册
+### 媒体源与播放器
 
-命令通过 `init()` 自动注册，新增命令只需实现 `Command` 接口并在 `init()` 中调用 `Register()`：
+媒体源、播放器和配置都已经开始分层：
+
+- `internal/source` 负责媒体源、订阅、归类和解析
+- `internal/player` 负责播放器发现、默认播放器和 HLS 兼容层
+- `internal/app` 负责把配置、播放器和媒体源组织成一个应用对象
+- `internal/workflow` 负责把 CLI、TUI、播放器和媒体源串成完整操作流程
+
+当前比较重要的实现约定是：
+
+- `GroupEpisodes` 优先按数字归类，再兜底到标题。
+- `goani config player <name> <path>` 只保存路径，不自动设置默认播放器。
+- `goani play` 会在真正播放时补默认播放器。
+- `PotPlayer + m3u8` 会优先走本地代理。
+
+---
+
+## 命令注册
+
+命令通过 `init()` 注册，新增命令需要实现 `Command` 接口并调用 `Register()`。
 
 ```go
 func init() {
-    Register(&MyCommand{})
+	Register(&MyCommand{})
 }
 ```
 
+如果是内部命令，记得实现 `HiddenCommand`，避免显示到顶层帮助里。
+
 ---
 
-## 贡献指南
+## 贡献建议
 
-1. Fork 本仓库
-2. 创建特性分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'feat: add amazing feature'`)
-4. 推送到分支 (`git push origin feature/amazing-feature`)
-5. 创建 Pull Request
+1. 改动尽量按功能块提交，不要把文档、代码和测试混成一坨。
+2. 复杂逻辑优先补 `*_test.go`，不要只靠 `cmd/goani-debug-*` 里的手动工具。
+3. 注释要解释边界、原因和副作用，不要重复函数名本身。
+4. 改完后至少跑一次 `go build` 和 `go test ./...`。
 
-### 提交规范
+---
 
-使用 [Conventional Commits](https://www.conventionalcommits.org/)：
+## 提交规范
+
+建议继续使用 Conventional Commits：
 
 - `feat:` 新功能
-- `fix:` 修复 bug
+- `fix:` 修复问题
 - `docs:` 文档更新
-- `refactor:` 代码重构
+- `refactor:` 结构调整
 - `test:` 测试相关
-- `chore:` 构建/工具相关
+- `chore:` 构建或工具调整

@@ -1,79 +1,56 @@
-<p align=center>
-<br>
-<a href="http://makeapullrequest.com"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg"></a>
-<img src="https://img.shields.io/badge/language-Go-blue">
-<img src="https://img.shields.io/badge/os-windows-yellowgreen">
-<img src="https://img.shields.io/badge/os-linux-brightgreen">
-<img src="https://img.shields.io/badge/os-mac-brightgreen">
-<br>
-<h1 align="center">goani-cli</h1>
-</p>
+# goani-cli
 
-<h3 align="center">命令行动漫播放器，专为中文动漫站点设计</h3>
+`goani-cli` 是一个面向中文动漫站点的终端工具。它保留传统 CLI，方便脚本和快速调用，也提供 `goani tui` 作为更完整的交互入口。
 
-## 简介
+## 这项目能做什么
 
-`goani-cli` 是一个用 Go 语言编写的命令行动漫播放器。
+- 搜索动漫
+- 进入 TUI 完成搜索、番剧筛选、选集、线路选择和播放
+- 管理播放器配置和片源订阅
+- 通过 `config.json` 统一保存配置
+- 为 `PotPlayer + m3u8` 提供本地代理兼容层
 
-### 特性
+## 推荐开始方式
 
-- 🚀 程序本体为单二进制文件
-- 🌐 支持 38+ 中文动漫源
-- 🎮 交互式命令行界面
-- 📺 支持多种播放器（mpv、vlc、potplayer、iina）
+第一次使用时，建议先完成播放器配置，然后直接进入 TUI：
 
-### 致谢
-
-本项目灵感来源于：
-- [pystardust/ani-cli](https://github.com/pystardust/ani-cli) - 原始 CLI 交互模型
-- [MajoSissi/animeko-source](https://github.com/MajoSissi/animeko-source) - 中文站点规则参考
-
----
-
-## 快速开始
-
-首次播放前，请先确保系统已安装 `mpv`、`vlc`、`potplayer` 或 `iina` 之一；如果程序未自动识别到播放器，可按[使用指南](docs/usage.md#配置播放器)手动配置路径。
-
-```bash
-# 进入交互式 TUI
+```powershell
+goani config player mpv "D:\Tools\mpv\mpv.exe"
 goani tui
-
-# 配置播放器（会同时设为默认播放器）
-goani config player mpv "/path/to/mpv"
-
-# 搜索动漫
-goani search 葬送的芙莉莲
-
-# 直接进入搜索 TUI（兼容入口）
-goani search --interactive 葬送的芙莉莲
-
-# 搜索并播放
-goani play 葬送的芙莉莲
 ```
 
----
+如果你更习惯命令行，也可以继续使用经典 CLI：
+
+```powershell
+goani search 葬送的芙莉莲
+goani play 葬送的芙莉莲
+goani source list
+```
 
 ## 文档
 
-| 文档 | 说明 |
-|------|------|
-| [安装指南](docs/installation.md) | Windows / macOS / Linux 安装方法 |
-| [使用指南](docs/usage.md) | 命令详解与播放器配置 |
-| [常见问题](docs/faq.md) | FAQ 与故障排除 |
-| [开发指南](docs/dev/development.md) | 构建、测试与贡献 |
-
----
+- [安装指南](docs/installation.md)
+- [使用指南](docs/usage.md)
+- [常见问题](docs/faq.md)
+- [开发指南](docs/dev/development.md)
 
 ## 支持的播放器
 
 | 播放器 | Windows | Linux | macOS |
 |--------|---------|-------|-------|
-| mpv | ✅ | ✅ | ✅ |
-| VLC | ✅ | ✅ | ✅ |
-| PotPlayer | ✅ | ❌ | ❌ |
-| IINA | ❌ | ❌ | ✅ |
+| mpv | 支持 | 支持 | 支持 |
+| VLC | 支持 | 支持 | 支持 |
+| PotPlayer | 支持 | 不支持 | 不支持 |
+| IINA | 不支持 | 不支持 | 支持 |
 
----
+`PotPlayer` 在部分 `m3u8` 线路上会使用本地代理播放，这属于兼容行为，不是错误。
+
+## 致谢
+
+本项目受以下项目启发：
+
+- [pystardust/ani-cli](https://github.com/pystardust/ani-cli)
+- [MajoSissi/animeko-source](https://github.com/MajoSissi/animeko-source)
 
 ## License
 
