@@ -8,7 +8,8 @@ import (
 )
 
 func main() {
-	fmt.Println("=== 播放器模块测试 ===\n")
+	fmt.Println("=== 播放器模块测试 ===")
+	fmt.Println()
 
 	// 测试 1: 加载配置
 	fmt.Println("【测试 1】加载配置")
@@ -18,9 +19,11 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Printf("✅ 成功\n")
-	if cfg.PlayerName != "" {
-		fmt.Printf("   已配置播放器: %s\n", cfg.PlayerName)
-		fmt.Printf("   路径: %s\n", cfg.PlayerPath)
+	if cfg.DefaultPlayer != "" {
+		fmt.Printf("   默认播放器: %s\n", cfg.DefaultPlayer)
+		if path := cfg.GetPath(cfg.DefaultPlayer); path != "" {
+			fmt.Printf("   路径: %s\n", path)
+		}
 	} else {
 		fmt.Println("   未配置播放器（将自动检测）")
 	}
@@ -43,10 +46,11 @@ func main() {
 
 	// 测试 3: 使用配置的播放器
 	fmt.Println("【测试 3】使用配置的播放器")
-	pmWithConfig := player.NewManagerWithConfig(cfg.PlayerName, cfg.PlayerPath)
+	pmWithConfig := player.NewManagerWithConfig(cfg.DefaultPlayer, cfg.Paths)
 	configPlayer := pmWithConfig.GetFirst()
 	if configPlayer == nil {
-		fmt.Println("❌ 失败: 无可用播放器\n")
+		fmt.Println("❌ 失败: 无可用播放器")
+		fmt.Println()
 		os.Exit(1)
 	}
 	fmt.Printf("✅ 成功: %s\n\n", configPlayer.Name())

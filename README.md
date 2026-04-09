@@ -17,7 +17,7 @@
 
 ### 特性
 
-- 🚀 单二进制文件，零依赖
+- 🚀 程序本体为单二进制文件
 - 🌐 支持 38+ 中文动漫源
 - 🎮 交互式命令行界面
 - 📺 支持多种播放器（mpv、vlc、potplayer、iina）
@@ -32,7 +32,12 @@
 
 ## 快速开始
 
+首次播放前，请先确保系统已安装 `mpv`、`vlc`、`potplayer` 或 `iina` 之一；如果程序未自动识别到播放器，可按[使用指南](docs/usage.md#配置播放器)手动配置路径。
+
 ```bash
+# 配置播放器（会同时设为默认播放器）
+goani config player mpv "/path/to/mpv"
+
 # 搜索动漫
 goani search 葬送的芙莉莲
 

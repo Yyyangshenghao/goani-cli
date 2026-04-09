@@ -32,7 +32,7 @@ goani <command> [arguments]
 
 ## 配置播放器
 
-首次使用需要配置播放器路径。
+首次使用建议先配置播放器。现在播放器配置会统一写入 `config.json`，支持保存多个播放器路径，并指定默认播放器。
 
 ### Windows
 
@@ -45,6 +45,9 @@ goani config player vlc "C:\Program Files\VideoLAN\VLC\vlc.exe"
 
 # PotPlayer
 goani config player potplayer "C:\Program Files\DAUM\PotPlayer\PotPlayerMini64.exe"
+
+# 设置默认播放器
+goani config player default mpv
 ```
 
 ### macOS
@@ -58,6 +61,9 @@ goani config player mpv "/usr/local/bin/mpv"
 
 # VLC
 goani config player vlc "/Applications/VLC.app/Contents/MacOS/VLC"
+
+# 设置默认播放器
+goani config player default iina
 ```
 
 ### Linux
@@ -68,7 +74,14 @@ goani config player mpv "/usr/bin/mpv"
 
 # VLC
 goani config player vlc "/usr/bin/vlc"
+
+# 设置默认播放器
+goani config player default mpv
 ```
+
+说明：
+- `goani config player <name> <path>` 会保存该播放器路径，并把它设为默认播放器
+- `goani config player default <name>` 只切换默认播放器，不改路径
 
 ---
 
@@ -170,9 +183,13 @@ goani version
 - Windows: `%USERPROFILE%\.goani\config.json`
 - macOS/Linux: `~/.goani/config.json`
 
+`config.json` 里会保存播放器路径、默认播放器和片源订阅地址。
+
 媒体源缓存：
 - Windows: `%USERPROFILE%\.goani\sources_cache.json`
 - macOS/Linux: `~/.goani/sources_cache.json`
+
+`sources_cache.json` 只保存拉取下来的片源缓存数据。
 
 ### 更换播放器
 
@@ -180,4 +197,26 @@ goani version
 
 ```bash
 goani config player vlc "/path/to/vlc"
+```
+
+### 配置示例
+
+```json
+{
+  "player": {
+    "default": "mpv",
+    "paths": {
+      "mpv": "D:\\MPV播放器\\mpv.exe",
+      "vlc": "C:\\Program Files\\VideoLAN\\VLC\\vlc.exe"
+    }
+  },
+  "sources": {
+    "subscriptions": [
+      {
+        "url": "https://sub.creamycake.org/v1/css1.json",
+        "name": "默认源"
+      }
+    ]
+  }
+}
 ```

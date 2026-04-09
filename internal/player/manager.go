@@ -1,5 +1,7 @@
 package player
 
+var supportedPlayers = []string{"mpv", "vlc", "potplayer", "iina"}
+
 // Manager 播放器管理器
 type Manager struct {
 	players []Player
@@ -7,32 +9,12 @@ type Manager struct {
 
 // NewManager 创建播放器管理器
 func NewManager() *Manager {
-	return &Manager{
-		players: []Player{
-			NewMPVPlayer(),
-			NewVLCPlayer(),
-			NewPotPlayer(),
-			NewIINAPlayer(),
-		},
-	}
+	return &Manager{players: buildPlayers("", nil)}
 }
 
 // NewManagerWithConfig 使用配置创建播放器管理器
-func NewManagerWithConfig(playerName, playerPath string) *Manager {
-	// 如果配置了自定义路径，优先使用
-	if playerPath != "" {
-		switch playerName {
-		case "mpv":
-			return &Manager{players: []Player{NewMPVPlayerWithPath(playerPath)}}
-		case "vlc":
-			return &Manager{players: []Player{&VLCPlayer{path: playerPath}}}
-		case "potplayer":
-			return &Manager{players: []Player{&PotPlayer{path: playerPath}}}
-		case "iina":
-			return &Manager{players: []Player{&IINAPlayer{path: playerPath}}}
-		}
-	}
-	return NewManager()
+func NewManagerWithConfig(defaultPlayer string, paths map[string]string) *Manager {
+	return &Manager{players: buildPlayers(defaultPlayer, paths)}
 }
 
 // GetAvailable 获取所有可用的播放器
@@ -64,4 +46,65 @@ func (m *Manager) GetByName(name string) Player {
 		}
 	}
 	return nil
+}
+
+// IsSupportedPlayer 是否为支持的播放器
+func IsSupportedPlayer(name string) bool {
+	for _, supported := range supportedPlayers {
+		if name == supported {
+			return true
+		}
+	}
+	return false
+}
+
+func buildPlayers(defaultPlayer string, paths map[string]string) []Player {
+	order := orderedPlayers(defaultPlayer)
+	players := make([]Player, 0, len(order))
+	for _, name := range order {
+		if p := newPlayer(name, paths[name]); p != nil {
+			players = append(players, p)
+		}
+	}
+	return players
+}
+
+func orderedPlayers(defaultPlayer string) []string {
+	order := make([]string, 0, len(supportedPlayers))
+	if defaultPlayer != "" && IsSupportedPlayer(defaultPlayer) {
+		order = append(order, defaultPlayer)
+	}
+	for _, name := range supportedPlayers {
+		if name != defaultPlayer {
+			order = append(order, name)
+		}
+	}
+	return order
+}
+
+func newPlayer(name, path string) Player {
+	switch name {
+	case "mpv":
+		if path != "" {
+			return NewMPVPlayerWithPath(path)
+		}
+		return NewMPVPlayer()
+	case "vlc":
+		if path != "" {
+			return &VLCPlayer{path: path}
+		}
+		return NewVLCPlayer()
+	case "potplayer":
+		if path != "" {
+			return &PotPlayer{path: path}
+		}
+		return NewPotPlayer()
+	case "iina":
+		if path != "" {
+			return &IINAPlayer{path: path}
+		}
+		return NewIINAPlayer()
+	default:
+		return nil
+	}
 }

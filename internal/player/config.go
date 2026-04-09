@@ -1,77 +1,91 @@
 package player
 
-import (
-	"encoding/json"
-	"os"
-	"path/filepath"
-)
+import "github.com/Yyyangshenghao/goani-cli/internal/settings"
 
 // Config 播放器配置
 type Config struct {
-	PlayerName string `json:"playerName"`
-	PlayerPath string `json:"playerPath"`
+	DefaultPlayer string            `json:"defaultPlayer"`
+	Paths         map[string]string `json:"paths"`
 }
 
 // DefaultConfig 默认配置
 func DefaultConfig() *Config {
 	return &Config{
-		PlayerName: "",
-		PlayerPath: "",
+		DefaultPlayer: "",
+		Paths:         map[string]string{},
 	}
-}
-
-// GetConfigPath 获取配置文件路径
-func GetConfigPath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	configDir := filepath.Join(home, ".goani")
-	if err := os.MkdirAll(configDir, 0755); err != nil {
-		return "", err
-	}
-	return filepath.Join(configDir, "config.json"), nil
 }
 
 // LoadConfig 加载配置
 func LoadConfig() (*Config, error) {
-	path, err := GetConfigPath()
+	cfg, err := settings.Load()
 	if err != nil {
 		return DefaultConfig(), nil
 	}
 
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return DefaultConfig(), nil
-		}
-		return nil, err
-	}
-
-	var cfg Config
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil, err
-	}
-	return &cfg, nil
+	return fromSettings(cfg.Player), nil
 }
 
 // Save 保存配置
 func (c *Config) Save() error {
-	path, err := GetConfigPath()
+	appCfg, err := settings.Load()
 	if err != nil {
 		return err
 	}
 
-	data, err := json.MarshalIndent(c, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(path, data, 0644)
+	appCfg.Player = toSettings(c)
+	return appCfg.Save()
 }
 
 // SetPlayer 设置播放器
 func (c *Config) SetPlayer(name, path string) {
-	c.PlayerName = name
-	c.PlayerPath = path
+	if c.Paths == nil {
+		c.Paths = map[string]string{}
+	}
+	c.Paths[name] = path
+	c.DefaultPlayer = name
+}
+
+// SetDefaultPlayer 设置默认播放器
+func (c *Config) SetDefaultPlayer(name string) {
+	c.DefaultPlayer = name
+}
+
+// GetPath 获取播放器路径
+func (c *Config) GetPath(name string) string {
+	if c.Paths == nil {
+		return ""
+	}
+	return c.Paths[name]
+}
+
+func fromSettings(cfg settings.PlayerConfig) *Config {
+	paths := map[string]string{}
+	for name, path := range cfg.Paths {
+		paths[name] = path
+	}
+
+	return &Config{
+		DefaultPlayer: cfg.Default,
+		Paths:         paths,
+	}
+}
+
+func toSettings(cfg *Config) settings.PlayerConfig {
+	paths := map[string]string{}
+	if cfg != nil {
+		for name, path := range cfg.Paths {
+			paths[name] = path
+		}
+	}
+
+	defaultPlayer := ""
+	if cfg != nil {
+		defaultPlayer = cfg.DefaultPlayer
+	}
+
+	return settings.PlayerConfig{
+		Default: defaultPlayer,
+		Paths:   paths,
+	}
 }

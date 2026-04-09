@@ -2,26 +2,29 @@ package app
 
 import (
 	"github.com/Yyyangshenghao/goani-cli/internal/player"
+	"github.com/Yyyangshenghao/goani-cli/internal/settings"
 	"github.com/Yyyangshenghao/goani-cli/internal/source"
 	"github.com/Yyyangshenghao/goani-cli/internal/source/webselector"
 )
 
 // App 应用核心，管理全局资源和配置
 type App struct {
+	Settings      *settings.Config
 	PlayerConfig  *player.Config
 	SourceManager *source.SourceManager
 }
 
 // New 创建应用实例
 func New() *App {
-	cfg, err := player.LoadConfig()
+	cfg, err := settings.Load()
 	if err != nil {
-		cfg = player.DefaultConfig()
+		cfg = settings.DefaultConfig()
 	}
 
 	return &App{
-		PlayerConfig:  cfg,
-		SourceManager: source.NewSourceManager(),
+		Settings:      cfg,
+		PlayerConfig:  playerConfigFromSettings(cfg),
+		SourceManager: source.NewSourceManager(cfg),
 	}
 }
 
@@ -50,16 +53,30 @@ func (a *App) GetSourceByName(name string) *webselector.WebSelectorSource {
 
 // GetPlayer 获取配置的播放器
 func (a *App) GetPlayer() player.Player {
-	pm := player.NewManagerWithConfig(a.PlayerConfig.PlayerName, a.PlayerConfig.PlayerPath)
+	pm := player.NewManagerWithConfig(a.PlayerConfig.DefaultPlayer, a.PlayerConfig.Paths)
 	return pm.GetFirst()
 }
 
 // SaveConfig 保存配置
 func (a *App) SaveConfig() error {
-	return a.PlayerConfig.Save()
+	a.Settings.Player.Default = a.PlayerConfig.DefaultPlayer
+	a.Settings.Player.Paths = map[string]string{}
+	for name, path := range a.PlayerConfig.Paths {
+		a.Settings.Player.Paths[name] = path
+	}
+	return a.Settings.Save()
 }
 
 // GetAllSources 获取所有媒体源
 func (a *App) GetAllSources() []source.MediaSource {
 	return a.SourceManager.GetAll()
+}
+
+func playerConfigFromSettings(cfg *settings.Config) *player.Config {
+	pc := player.DefaultConfig()
+	pc.DefaultPlayer = cfg.Player.Default
+	for name, path := range cfg.Player.Paths {
+		pc.Paths[name] = path
+	}
+	return pc
 }

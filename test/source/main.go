@@ -8,14 +8,16 @@ import (
 )
 
 func main() {
-	fmt.Println("=== goani-cli 核心功能测试 ===\n")
+	fmt.Println("=== goani-cli 核心功能测试 ===")
+	fmt.Println()
 
 	// 测试 1: 使用 SourceManager 加载源
 	fmt.Println("【测试 1】加载媒体源")
 	sm := webselector.NewTestSourceManager()
 	sources := sm.GetAll()
 	if len(sources) == 0 {
-		fmt.Println("❌ 失败: 媒体源为空\n")
+		fmt.Println("❌ 失败: 媒体源为空")
+		fmt.Println()
 		os.Exit(1)
 	}
 	fmt.Printf("✅ 成功: 加载 %d 个媒体源\n\n", len(sources))
@@ -30,7 +32,8 @@ func main() {
 		os.Exit(1)
 	}
 	if len(results) == 0 {
-		fmt.Println("❌ 失败: 搜索结果为空\n")
+		fmt.Println("❌ 失败: 搜索结果为空")
+		fmt.Println()
 		os.Exit(1)
 	}
 	fmt.Printf("✅ 成功: 找到 %d 条结果\n", len(results))
@@ -52,7 +55,8 @@ func main() {
 		os.Exit(1)
 	}
 	if len(episodes) == 0 {
-		fmt.Println("❌ 失败: 剧集列表为空\n")
+		fmt.Println("❌ 失败: 剧集列表为空")
+		fmt.Println()
 		os.Exit(1)
 	}
 	fmt.Printf("✅ 成功: 找到 %d 集\n", len(episodes))
@@ -74,7 +78,8 @@ func main() {
 		os.Exit(1)
 	}
 	if videoURL == "" {
-		fmt.Println("❌ 失败: 视频直链为空\n")
+		fmt.Println("❌ 失败: 视频直链为空")
+		fmt.Println()
 		os.Exit(1)
 	}
 	fmt.Printf("✅ 成功: %s\n\n", videoURL)

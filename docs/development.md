@@ -25,6 +25,7 @@ goani-cli/
 ### 前置要求
 
 - Go 1.22+
+- 如果使用 `make`，需要 GNU Make 和 Bash 兼容环境；Windows 下建议使用 Git Bash、WSL，或直接使用下面的 `go build` / `go run` 命令
 
 ### 克隆并构建
 
@@ -34,6 +35,12 @@ cd goani-cli
 
 # 构建当前平台
 go build -o goani ./cmd/goani
+```
+
+Windows PowerShell 可直接使用：
+
+```powershell
+go build -o goani.exe .\cmd\goani
 ```
 
 ### 使用 Makefile
@@ -56,6 +63,16 @@ go build -ldflags="-s -w \
   -o goani ./cmd/goani
 ```
 
+Windows PowerShell 示例：
+
+```powershell
+$version = "v0.1.0"
+$gitCommit = git rev-parse --short HEAD
+$buildDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd_HH:mm:ss")
+
+go build -ldflags "-s -w -X github.com/Yyyangshenghao/goani-cli/internal/version.Version=$version -X github.com/Yyyangshenghao/goani-cli/internal/version.GitCommit=$gitCommit -X github.com/Yyyangshenghao/goani-cli/internal/version.BuildDate=$buildDate" -o goani.exe .\cmd\goani
+```
+
 ---
 
 ## 测试
@@ -65,7 +82,7 @@ go build -ldflags="-s -w \
 go run test/source/main.go
 
 # 播放器测试
-go run test/player/main.go
+go run test/player/player.go
 ```
 
 ---

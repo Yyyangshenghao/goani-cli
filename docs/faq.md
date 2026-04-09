@@ -63,7 +63,7 @@ Remove-Item "$env:USERPROFILE\.goani\config.json"
 
 ## Q: 支持哪些动漫源？
 
-运行 `goani list` 可查看当前支持的所有媒体源。
+运行 `goani source list` 可查看当前支持的所有媒体源和订阅列表。
 
 ---
 

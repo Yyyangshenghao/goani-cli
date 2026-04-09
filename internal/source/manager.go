@@ -9,16 +9,16 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
-)
 
-// DefaultSourceURL 默认媒体源订阅地址
-const DefaultSourceURL = "https://sub.creamycake.org/v1/css1.json"
+	"github.com/Yyyangshenghao/goani-cli/internal/settings"
+)
 
 // SourceManager 媒体源管理器
 type SourceManager struct {
 	sources       []MediaSource
 	subscriptions []Subscription
 	cachePath     string
+	config        *settings.Config
 	mu            sync.RWMutex
 }
 
@@ -26,22 +26,22 @@ type SourceManager struct {
 type Subscription struct {
 	URL       string `json:"url"`
 	Name      string `json:"name"`
-	UpdatedAt string `json:"updatedAt"`
+	UpdatedAt string `json:"updatedAt,omitempty"`
 }
 
-// SourceConfig 媒体源配置文件
-type SourceConfig struct {
+// SourceCache 片源缓存文件
+type SourceCache struct {
 	Subscriptions []Subscription `json:"subscriptions"`
 	Sources       []MediaSource  `json:"sources"`
 }
 
 // NewSourceManager 创建媒体源管理器
-func NewSourceManager() *SourceManager {
-	home, _ := os.UserHomeDir()
-	cachePath := filepath.Join(home, ".goani", "sources_cache.json")
+func NewSourceManager(cfg *settings.Config) *SourceManager {
+	cachePath, _ := settings.GetSourceCachePath()
 
 	sm := &SourceManager{
 		cachePath: cachePath,
+		config:    cfg,
 	}
 	sm.load()
 	return sm
@@ -52,13 +52,18 @@ func (sm *SourceManager) load() {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
+	sm.subscriptions = subscriptionsFromSettings(sm.config.Sources.Subscriptions)
+	if len(sm.subscriptions) == 0 {
+		sm.subscriptions = defaultSubscriptions()
+	}
+
 	// 1. 尝试加载缓存
 	if sm.loadCache() {
 		return
 	}
 
-	// 2. 订阅默认源
-	sm.subscribeDefault()
+	// 2. 刷新当前订阅
+	sm.refreshSourcesLocked()
 }
 
 // loadCache 加载缓存的配置
@@ -68,35 +73,22 @@ func (sm *SourceManager) loadCache() bool {
 		return false
 	}
 
-	var cfg SourceConfig
+	var cfg SourceCache
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return false
 	}
 
+	if !sameSubscriptions(cfg.Subscriptions, sm.subscriptions) {
+		return false
+	}
+
 	sm.sources = cfg.Sources
-	sm.subscriptions = cfg.Subscriptions
+	if len(cfg.Subscriptions) > 0 {
+		sm.subscriptions = cloneSubscriptions(cfg.Subscriptions)
+		sm.config.Sources.Subscriptions = subscriptionsToSettings(cfg.Subscriptions)
+		_ = sm.config.Save()
+	}
 	return len(sm.sources) > 0
-}
-
-// subscribeDefault 订阅默认源
-func (sm *SourceManager) subscribeDefault() {
-	sources, err := sm.fetchFromURL(DefaultSourceURL)
-	if err != nil {
-		// 如果获取失败，保持空
-		sm.sources = []MediaSource{}
-		sm.subscriptions = []Subscription{}
-		return
-	}
-
-	sm.sources = sources
-	sm.subscriptions = []Subscription{
-		{
-			URL:       DefaultSourceURL,
-			Name:      "默认源",
-			UpdatedAt: time.Now().Format("2006-01-02 15:04:05"),
-		},
-	}
-	sm.saveCache()
 }
 
 // saveCache 保存缓存
@@ -106,8 +98,8 @@ func (sm *SourceManager) saveCache() error {
 		return err
 	}
 
-	cfg := SourceConfig{
-		Subscriptions: sm.subscriptions,
+	cfg := SourceCache{
+		Subscriptions: cloneSubscriptions(sm.subscriptions),
 		Sources:       sm.sources,
 	}
 
@@ -159,7 +151,7 @@ func (sm *SourceManager) Count() int {
 func (sm *SourceManager) GetSubscriptions() []Subscription {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
-	return sm.subscriptions
+	return cloneSubscriptions(sm.subscriptions)
 }
 
 // Subscribe 添加订阅
@@ -189,7 +181,7 @@ func (sm *SourceManager) Subscribe(url, name string) error {
 	sm.subscriptions = append(sm.subscriptions, sub)
 	sm.sources = append(sm.sources, sources...)
 
-	return sm.saveCache()
+	return sm.saveLocked()
 }
 
 // Unsubscribe 取消订阅
@@ -212,7 +204,7 @@ func (sm *SourceManager) Unsubscribe(url string) error {
 		sm.sources = append(sm.sources, sources...)
 	}
 
-	return sm.saveCache()
+	return sm.saveLocked()
 }
 
 // Refresh 刷新订阅
@@ -235,7 +227,7 @@ func (sm *SourceManager) Refresh() error {
 		sm.sources = append(sm.sources, sources...)
 	}
 
-	return sm.saveCache()
+	return sm.saveLocked()
 }
 
 // Reset 重置为默认源
@@ -247,8 +239,9 @@ func (sm *SourceManager) Reset() error {
 	os.Remove(sm.cachePath)
 
 	// 重新订阅默认源
-	sm.subscribeDefault()
-	return nil
+	sm.subscriptions = defaultSubscriptions()
+	sm.refreshSourcesLocked()
+	return sm.saveLocked()
 }
 
 // fetchFromURL 从URL获取媒体源配置
@@ -279,6 +272,83 @@ func (sm *SourceManager) fetchFromURL(url string) ([]MediaSource, error) {
 
 // GetCachePath 获取缓存文件路径
 func GetCachePath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".goani", "sources_cache.json")
+	path, _ := settings.GetSourceCachePath()
+	return path
+}
+
+func (sm *SourceManager) refreshSourcesLocked() {
+	sm.sources = []MediaSource{}
+	for i := range sm.subscriptions {
+		sources, err := sm.fetchFromURL(sm.subscriptions[i].URL)
+		if err != nil {
+			continue
+		}
+		sm.subscriptions[i].UpdatedAt = time.Now().Format("2006-01-02 15:04:05")
+		sm.sources = append(sm.sources, sources...)
+	}
+	_ = sm.saveLocked()
+}
+
+func (sm *SourceManager) saveLocked() error {
+	sm.config.Sources.Subscriptions = subscriptionsToSettings(sm.subscriptions)
+	if err := sm.config.Save(); err != nil {
+		return err
+	}
+	return sm.saveCache()
+}
+
+func sameSubscriptions(a, b []Subscription) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].URL != b[i].URL || a[i].Name != b[i].Name {
+			return false
+		}
+	}
+	return true
+}
+
+func defaultSubscriptions() []Subscription {
+	return subscriptionsFromSettings(settings.DefaultSubscriptions())
+}
+
+func subscriptionsFromSettings(subs []settings.Subscription) []Subscription {
+	if len(subs) == 0 {
+		return nil
+	}
+
+	result := make([]Subscription, len(subs))
+	for i, sub := range subs {
+		result[i] = Subscription{
+			URL:  sub.URL,
+			Name: sub.Name,
+		}
+	}
+	return result
+}
+
+func subscriptionsToSettings(subs []Subscription) []settings.Subscription {
+	if len(subs) == 0 {
+		return nil
+	}
+
+	result := make([]settings.Subscription, len(subs))
+	for i, sub := range subs {
+		result[i] = settings.Subscription{
+			URL:  sub.URL,
+			Name: sub.Name,
+		}
+	}
+	return result
+}
+
+func cloneSubscriptions(subs []Subscription) []Subscription {
+	if len(subs) == 0 {
+		return nil
+	}
+
+	cloned := make([]Subscription, len(subs))
+	copy(cloned, subs)
+	return cloned
 }
