@@ -21,6 +21,21 @@ type playbackLaunchResult struct {
 	lineLabel    string
 }
 
+type playbackNavigationMode int
+
+const (
+	playbackNavigationStayOnLineSelection playbackNavigationMode = iota
+	playbackNavigationPlayEpisode
+	playbackNavigationReturnEpisodeList
+	playbackNavigationReturnAnimeList
+	playbackNavigationExitFlow
+)
+
+type playbackNavigationResult struct {
+	mode         playbackNavigationMode
+	episodeIndex int
+}
+
 // ShowAnimeListAndSelect 承接经典 CLI 的搜索后半段：选番、选集、播放。
 func ShowAnimeListAndSelect(application *app.App, animes []source.Anime, sourceName string) {
 	if len(animes) == 0 {
@@ -108,65 +123,73 @@ func showInteractiveSelectionFlow(application *app.App, animes []source.Anime, s
 			continue
 		}
 
+		selectedEpisodeIndex := 0
+
 	episodeLoop:
 		for {
-			episode, err := tui.RunEpisodeSelectionTUI(anime.Name, groups)
+			episode, episodeIndex, err := tui.RunEpisodeSelectionTUIWithSelection(anime.Name, groups, selectedEpisodeIndex)
 			if err != nil {
 				return fmt.Errorf("打开选集界面失败: %w", err)
 			}
 			if episode == nil {
 				break
 			}
+			selectedEpisodeIndex = episodeIndex
 
-			var lines []resolvedEpisodeCandidate
-			err = tui.RunLoadingTUI(
-				"正在解析线路",
-				"正在获取视频链接和清晰度，最长等待 5 秒",
-				func() error {
-					lines = resolveEpisodeCandidates(src, *episode)
-					return nil
-				},
-			)
-			if err != nil {
-				showTUIErrorScreen("线路解析失败", err.Error())
-				continue
-			}
-			if len(lines) == 0 {
-				showTUIErrorScreen("线路解析失败", "当前剧集没有解析到可用线路")
-				continue
-			}
-
-		lineLoop:
+		playCurrentEpisode:
 			for {
-				lineResult, err := tui.RunLineSelectionTUI(anime.Name, episode.Label(), buildLineSelectionItems(lines))
+				currentEpisode := groups[selectedEpisodeIndex]
+
+				lines, err := loadResolvedEpisodeLinesTUI(src, currentEpisode)
 				if err != nil {
-					return fmt.Errorf("打开线路选择页失败: %w", err)
-				}
-				if lineResult == nil {
+					showTUIErrorScreen("线路解析失败", err.Error())
 					continue episodeLoop
 				}
 
-				line := lines[lineResult.Index]
-				launch, err := playResolvedEpisodeCandidateTUI(application, *episode, line)
-				if err != nil {
-					showTUIErrorScreen("播放失败", err.Error())
-					continue lineLoop
-				}
+			lineLoop:
+				for {
+					lineResult, err := tui.RunLineSelectionTUI(anime.Name, currentEpisode.Label(), buildLineSelectionItems(lines))
+					if err != nil {
+						return fmt.Errorf("打开线路选择页失败: %w", err)
+					}
+					if lineResult == nil {
+						continue episodeLoop
+					}
 
-				nextAction, err := tui.RunPlaybackPageTUI(anime.Name, launch.episodeLabel, launch.playerName, launch.lineLabel)
-				if err != nil {
-					return fmt.Errorf("打开播放状态页失败: %w", err)
-				}
+					line := lines[lineResult.Index]
+					launch, err := playResolvedEpisodeCandidateTUI(application, currentEpisode, line)
+					if err != nil {
+						showTUIErrorScreen("播放失败", err.Error())
+						continue lineLoop
+					}
 
-				switch nextAction {
-				case tui.PlaybackActionEpisodeList:
-					continue episodeLoop
-				case tui.PlaybackActionAnimeList:
-					break episodeLoop
-				case tui.PlaybackActionHome, tui.PlaybackActionQuit:
-					return nil
-				default:
-					continue lineLoop
+					nextAction, err := tui.RunPlaybackPageTUI(
+						anime.Name,
+						launch.episodeLabel,
+						launch.playerName,
+						launch.lineLabel,
+						selectedEpisodeIndex > 0,
+						selectedEpisodeIndex < len(groups)-1,
+					)
+					if err != nil {
+						return fmt.Errorf("打开播放状态页失败: %w", err)
+					}
+
+					navigation := resolvePlaybackNavigation(nextAction, selectedEpisodeIndex, len(groups))
+					selectedEpisodeIndex = navigation.episodeIndex
+
+					switch navigation.mode {
+					case playbackNavigationPlayEpisode:
+						continue playCurrentEpisode
+					case playbackNavigationReturnEpisodeList:
+						continue episodeLoop
+					case playbackNavigationReturnAnimeList:
+						break episodeLoop
+					case playbackNavigationExitFlow:
+						return nil
+					default:
+						continue lineLoop
+					}
 				}
 			}
 		}
@@ -248,6 +271,53 @@ func showTUIErrorScreen(title, message string) {
 	if err := tui.RunTextTUI(title, message); err != nil {
 		consoleui.Error("%s: %s", title, message)
 	}
+}
+
+func loadResolvedEpisodeLinesTUI(src *webselector.WebSelectorSource, group source.EpisodeGroup) ([]resolvedEpisodeCandidate, error) {
+	var lines []resolvedEpisodeCandidate
+	err := tui.RunLoadingTUI(
+		"正在解析线路",
+		"正在获取视频链接和清晰度，最长等待 5 秒",
+		func() error {
+			lines = resolveEpisodeCandidates(src, group)
+			return nil
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if len(lines) == 0 {
+		return nil, fmt.Errorf("当前剧集没有解析到可用线路")
+	}
+	return lines, nil
+}
+
+func resolvePlaybackNavigation(action tui.PlaybackAction, currentEpisodeIndex, totalEpisodes int) playbackNavigationResult {
+	result := playbackNavigationResult{
+		mode:         playbackNavigationStayOnLineSelection,
+		episodeIndex: currentEpisodeIndex,
+	}
+
+	switch action {
+	case tui.PlaybackActionPreviousEpisode:
+		if currentEpisodeIndex > 0 {
+			result.mode = playbackNavigationPlayEpisode
+			result.episodeIndex = currentEpisodeIndex - 1
+		}
+	case tui.PlaybackActionNextEpisode:
+		if currentEpisodeIndex+1 < totalEpisodes {
+			result.mode = playbackNavigationPlayEpisode
+			result.episodeIndex = currentEpisodeIndex + 1
+		}
+	case tui.PlaybackActionEpisodeList:
+		result.mode = playbackNavigationReturnEpisodeList
+	case tui.PlaybackActionAnimeList:
+		result.mode = playbackNavigationReturnAnimeList
+	case tui.PlaybackActionHome, tui.PlaybackActionQuit:
+		result.mode = playbackNavigationExitFlow
+	}
+
+	return result
 }
 
 // playWithRequestContext 会根据播放器和线路格式决定是否启用兼容层。

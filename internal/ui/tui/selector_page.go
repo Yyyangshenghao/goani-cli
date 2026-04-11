@@ -71,6 +71,12 @@ func RunAnimeSelectionTUI(sourceName string, animes []source.Anime) (*source.Ani
 
 // RunEpisodeSelectionTUI 运行剧集选择 TUI
 func RunEpisodeSelectionTUI(animeName string, episodes []source.EpisodeGroup) (*source.EpisodeGroup, error) {
+	result, _, err := RunEpisodeSelectionTUIWithSelection(animeName, episodes, 0)
+	return result, err
+}
+
+// RunEpisodeSelectionTUIWithSelection 运行剧集选择 TUI，并允许调用方指定返回后默认高亮的剧集。
+func RunEpisodeSelectionTUIWithSelection(animeName string, episodes []source.EpisodeGroup, initialIndex int) (*source.EpisodeGroup, int, error) {
 	items := make([]string, len(episodes))
 	jumpValues := make([]string, len(episodes))
 	for i, episode := range episodes {
@@ -92,14 +98,15 @@ func RunEpisodeSelectionTUI(animeName string, episodes []source.EpisodeGroup) (*
 		allowReverse: true,
 		allowNumber:  true,
 		reversed:     false,
+		selected:     clampSelectionIndex(initialIndex, len(episodes)),
 	}
 
 	result, err := runSelectorTUI(model)
 	if err != nil || result == nil {
-		return nil, err
+		return nil, -1, err
 	}
 
-	return &episodes[result.index], nil
+	return &episodes[result.index], result.index, nil
 }
 
 // runSelectorTUI 统一启动列表类 TUI，避免番剧和剧集各自维护一套状态机。
@@ -405,4 +412,17 @@ func episodeSelectionLabel(episode source.EpisodeGroup) string {
 		return fmt.Sprintf("%s  (%d 条线路)", label, len(episode.Candidates))
 	}
 	return label
+}
+
+func clampSelectionIndex(index, total int) int {
+	if total <= 0 {
+		return 0
+	}
+	if index < 0 {
+		return 0
+	}
+	if index >= total {
+		return total - 1
+	}
+	return index
 }
