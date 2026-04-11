@@ -24,8 +24,7 @@ build-all:
 
 # 运行测试
 test:
-	go run test/source/main.go
-	go run test/player/main.go
+	go test ./...
 
 # 运行
 run:

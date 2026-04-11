@@ -6,6 +6,13 @@
 
 如果想看后续待办和演进方向，可以继续看 [todo.md](./todo.md)。
 
+## 文档分工
+
+- `README.md`、`docs/installation.md`、`docs/usage.md`、`docs/faq.md` 记录当前对用户生效的行为和用法。
+- `docs/dev/development.md`、`docs/dev/command.md` 记录当前维护者需要了解的结构、命令和约定。
+- `docs/dev/todo.md` 只作为 backlog 使用，不应该当作“当前已经实现的功能清单”。
+- 某项功能已经落地后，应尽快把说明同步到现状文档里，并从 `todo.md` 里移除或改写成下一步增强项。
+
 ---
 
 ## 项目结构
@@ -66,6 +73,12 @@ make build
 make build-all
 make test
 make install
+```
+
+其中 `make test` 当前等价于：
+
+```bash
+go test ./...
 ```
 
 ### 版本信息注入
