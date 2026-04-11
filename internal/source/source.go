@@ -10,6 +10,7 @@ type Anime struct {
 type Episode struct {
 	Name        string
 	URL         string
+	SourceName  string
 	Number      string
 	NumberValue float64
 	HasNumber   bool
@@ -17,8 +18,9 @@ type Episode struct {
 
 // EpisodeCandidate 剧集候选线路
 type EpisodeCandidate struct {
-	Name string
-	URL  string
+	Name       string
+	URL        string
+	SourceName string
 }
 
 // EpisodeGroup 归类后的剧集

@@ -173,7 +173,7 @@ func (c *SearchCommand) runInteractiveSearchWithError(application *app.App, keyw
 		return nil
 	}
 
-	return workflow.ShowInteractiveSelectionFlow(application, selection.Results, selection.SourceName)
+	return workflow.ShowInteractiveSelectionFlow(application, selection.Results, selection.SelectedIndex)
 }
 
 // Usage 返回使用说明

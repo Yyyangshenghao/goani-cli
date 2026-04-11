@@ -10,7 +10,7 @@ import (
 
 // ShowInteractiveSelectionFlow 承接实时搜索后的多页面 TUI 流：
 // 选番、选集、选线路、播放，以及播放后的回跳。
-func ShowInteractiveSelectionFlow(application *app.App, animes []source.Anime, sourceName string) error {
+func ShowInteractiveSelectionFlow(application *app.App, animes []source.AggregatedAnime, selectedIndex int) error {
 	if len(animes) == 0 {
 		return nil
 	}
@@ -19,5 +19,5 @@ func ShowInteractiveSelectionFlow(application *app.App, animes []source.Anime, s
 		return fmt.Errorf("当前终端不支持交互式 TUI")
 	}
 
-	return showInteractiveSelectionFlow(application, animes, sourceName)
+	return showAggregatedSelectionFlow(application, animes, selectedIndex)
 }

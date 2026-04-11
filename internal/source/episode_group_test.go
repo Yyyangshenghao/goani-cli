@@ -31,9 +31,9 @@ func TestGroupEpisodesMergesSameEpisodeNumberAcrossDifferentNames(t *testing.T) 
 
 func TestGroupEpisodesDeduplicatesSameCandidateURL(t *testing.T) {
 	episodes := []Episode{
-		{Name: "第13.5集", URL: "https://a.example.com/13.5", Number: "13.5", NumberValue: 13.5, HasNumber: true},
-		{Name: "13.5", URL: "https://a.example.com/13.5", Number: "13.5", NumberValue: 13.5, HasNumber: true},
-		{Name: "13.5", URL: "https://b.example.com/13.5", Number: "13.5", NumberValue: 13.5, HasNumber: true},
+		{Name: "第13.5集", URL: "https://a.example.com/13.5", SourceName: "源A", Number: "13.5", NumberValue: 13.5, HasNumber: true},
+		{Name: "13.5", URL: "https://a.example.com/13.5", SourceName: "源A", Number: "13.5", NumberValue: 13.5, HasNumber: true},
+		{Name: "13.5", URL: "https://a.example.com/13.5", SourceName: "源B", Number: "13.5", NumberValue: 13.5, HasNumber: true},
 	}
 
 	groups := GroupEpisodes(episodes)
@@ -46,5 +46,11 @@ func TestGroupEpisodesDeduplicatesSameCandidateURL(t *testing.T) {
 	}
 	if groups[0].Number != "13.5" {
 		t.Fatalf("unexpected episode number: got %q want %q", groups[0].Number, "13.5")
+	}
+	if groups[0].Candidates[0].SourceName != "源A" {
+		t.Fatalf("unexpected first candidate source: got %q", groups[0].Candidates[0].SourceName)
+	}
+	if groups[0].Candidates[1].SourceName != "源B" {
+		t.Fatalf("unexpected second candidate source: got %q", groups[0].Candidates[1].SourceName)
 	}
 }

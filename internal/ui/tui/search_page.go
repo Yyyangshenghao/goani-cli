@@ -30,8 +30,8 @@ var (
 // SearchTUISelection 表示搜索页完成后交给后续流程的选择结果。
 // SearchTUISelection TUI 搜索完成后的选择结果
 type SearchTUISelection struct {
-	SourceName string
-	Results    []source.Anime
+	Results       []source.AggregatedAnime
+	SelectedIndex int
 }
 
 type searchDebounceMsg struct {
@@ -137,20 +137,19 @@ func (m searchTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "down", "j":
-			success := successSearchResults(m.results)
-			if m.selected < len(success)-1 {
+			aggregated := aggregatedSearchResults(m.results)
+			if m.selected < len(aggregated)-1 {
 				m.selected++
 			}
 			return m, nil
 		case "enter":
-			success := successSearchResults(m.results)
-			if len(success) == 0 || m.selected < 0 || m.selected >= len(success) {
+			aggregated := aggregatedSearchResults(m.results)
+			if len(aggregated) == 0 || m.selected < 0 || m.selected >= len(aggregated) {
 				return m, nil
 			}
-			picked := success[m.selected]
 			m.selection = &SearchTUISelection{
-				SourceName: picked.SourceName,
-				Results:    picked.Results,
+				Results:       aggregated,
+				SelectedIndex: m.selected,
 			}
 			return m, tea.Quit
 		}
@@ -202,9 +201,9 @@ func (m searchTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.results = append(m.results, msg.result)
 		m.completed++
-		success := successSearchResults(m.results)
-		if m.selected >= len(success) && len(success) > 0 {
-			m.selected = len(success) - 1
+		aggregated := aggregatedSearchResults(m.results)
+		if m.selected >= len(aggregated) && len(aggregated) > 0 {
+			m.selected = len(aggregated) - 1
 		}
 
 		if m.completed >= m.totalSources {
@@ -244,21 +243,21 @@ func (m searchTUIModel) View() string {
 		b.WriteString("\n")
 	}
 
-	success := successSearchResults(m.results)
-	if len(success) == 0 {
+	aggregated := aggregatedSearchResults(m.results)
+	if len(aggregated) == 0 {
 		b.WriteString(tuiHintStyle.Render("输入至少 2 个字后开始搜索，按 Esc 退出"))
 		if !m.searching && strings.TrimSpace(m.input.Value()) != "" && len([]rune(strings.TrimSpace(m.input.Value()))) >= 2 && m.completed >= m.totalSources {
 			b.WriteString("\n")
-			b.WriteString(tuiMutedStyle.Render("没有可用片源结果，可以继续修改关键词"))
+			b.WriteString(tuiMutedStyle.Render("没有聚合到可用番剧，可以继续修改关键词"))
 		}
 		return b.String()
 	}
 
 	b.WriteString("\n")
-	b.WriteString(tuiTitleStyle.Render("可选片源"))
+	b.WriteString(tuiTitleStyle.Render("聚合番剧"))
 	b.WriteString("\n")
-	for i, item := range success {
-		line := fmt.Sprintf("%s  %s  %dms  %d 条结果", pointer(i == m.selected), item.SourceName, item.Duration.Milliseconds(), len(item.Results))
+	for i, item := range aggregated {
+		line := fmt.Sprintf("%s  %s  [%d 个片源 / %d 条命中]", pointer(i == m.selected), item.Name, item.SourceCount(), item.HitCount())
 		if i == m.selected {
 			b.WriteString(tuiPickStyle.Render(line))
 		} else {
@@ -268,7 +267,7 @@ func (m searchTUIModel) View() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(tuiHintStyle.Render("↑/↓ 选择片源，Enter 确认，Esc 退出"))
+	b.WriteString(tuiHintStyle.Render("↑/↓ 选择番剧，Enter 确认，Esc 退出"))
 
 	return strings.TrimRight(b.String(), "\n")
 }
@@ -316,6 +315,20 @@ func successSearchResults(results []app.SourceSearchResult) []app.SourceSearchRe
 		}
 	}
 	return success
+}
+
+func aggregatedSearchResults(results []app.SourceSearchResult) []source.AggregatedAnime {
+	success := successSearchResults(results)
+	hits := make([]source.AnimeHit, 0)
+	for _, item := range success {
+		for _, anime := range item.Results {
+			hits = append(hits, source.AnimeHit{
+				SourceName: item.SourceName,
+				Anime:      anime,
+			})
+		}
+	}
+	return source.GroupAnimes(hits)
 }
 
 func pointer(selected bool) string {

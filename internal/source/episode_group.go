@@ -19,14 +19,16 @@ func GroupEpisodes(episodes []Episode) []EpisodeGroup {
 
 	for i, episode := range episodes {
 		key := episodeGroupKey(episode)
+		dedupeKey := episode.SourceName + "\n" + episode.URL
 		if idx, ok := indexByKey[key]; ok {
-			if _, exists := seenURLs[key][episode.URL]; exists {
+			if _, exists := seenURLs[key][dedupeKey]; exists {
 				continue
 			}
-			seenURLs[key][episode.URL] = struct{}{}
+			seenURLs[key][dedupeKey] = struct{}{}
 			groups[idx].Candidates = append(groups[idx].Candidates, EpisodeCandidate{
-				Name: episode.Name,
-				URL:  episode.URL,
+				Name:       episode.Name,
+				URL:        episode.URL,
+				SourceName: episode.SourceName,
 			})
 			groups[idx].Name = betterEpisodeName(groups[idx].Name, episode.Name)
 			continue
@@ -34,7 +36,7 @@ func GroupEpisodes(episodes []Episode) []EpisodeGroup {
 
 		indexByKey[key] = len(groups)
 		seenURLs[key] = map[string]struct{}{
-			episode.URL: {},
+			dedupeKey: {},
 		}
 		groups = append(groups, EpisodeGroup{
 			Name:        episode.Name,
@@ -43,8 +45,9 @@ func GroupEpisodes(episodes []Episode) []EpisodeGroup {
 			HasNumber:   episode.HasNumber,
 			Candidates: []EpisodeCandidate{
 				{
-					Name: episode.Name,
-					URL:  episode.URL,
+					Name:       episode.Name,
+					URL:        episode.URL,
+					SourceName: episode.SourceName,
 				},
 			},
 			order: i,

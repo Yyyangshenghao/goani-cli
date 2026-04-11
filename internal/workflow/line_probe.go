@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Yyyangshenghao/goani-cli/internal/app"
 	"github.com/Yyyangshenghao/goani-cli/internal/source"
-	"github.com/Yyyangshenghao/goani-cli/internal/source/webselector"
 	tui "github.com/Yyyangshenghao/goani-cli/internal/ui/tui"
 )
 
@@ -40,7 +40,7 @@ type resolvedCandidateMessage struct {
 
 // resolveEpisodeCandidates 会并发解析当前剧集下的所有线路，并把总等待时间限制在 5 秒以内。
 // 超时的线路会保留在列表里，但会被标记成失败状态，避免整页被慢线路拖住。
-func resolveEpisodeCandidates(src *webselector.WebSelectorSource, group source.EpisodeGroup) []resolvedEpisodeCandidate {
+func resolveEpisodeCandidates(application *app.App, group source.EpisodeGroup) []resolvedEpisodeCandidate {
 	resolved := make([]resolvedEpisodeCandidate, len(group.Candidates))
 	resultCh := make(chan resolvedCandidateMessage, len(group.Candidates))
 
@@ -51,12 +51,12 @@ func resolveEpisodeCandidates(src *webselector.WebSelectorSource, group source.E
 			episodeURL: candidate.URL,
 		}
 
-		go func(index int, name string, episodeURL string) {
+		go func(index int, name string, candidate source.EpisodeCandidate) {
 			resultCh <- resolvedCandidateMessage{
 				index: index,
-				item:  resolveEpisodeCandidate(src, name, episodeURL),
+				item:  resolveEpisodeCandidate(application, name, candidate),
 			}
-		}(i, label, candidate.URL)
+		}(i, label, candidate)
 	}
 
 	timer := time.NewTimer(lineResolutionTimeout)
@@ -83,14 +83,26 @@ func resolveEpisodeCandidates(src *webselector.WebSelectorSource, group source.E
 	return resolved
 }
 
-func resolveEpisodeCandidate(src *webselector.WebSelectorSource, name, episodeURL string) resolvedEpisodeCandidate {
+func resolveEpisodeCandidate(application *app.App, name string, candidate source.EpisodeCandidate) resolvedEpisodeCandidate {
 	item := resolvedEpisodeCandidate{
 		name:       name,
-		episodeURL: episodeURL,
+		episodeURL: candidate.URL,
+	}
+
+	sourceName := strings.TrimSpace(candidate.SourceName)
+	if sourceName == "" {
+		item.err = fmt.Errorf("当前线路缺少片源信息")
+		return item
+	}
+
+	src := application.GetSourceByName(sourceName)
+	if src == nil {
+		item.err = fmt.Errorf("未找到片源: %s", sourceName)
+		return item
 	}
 
 	resolver := src.WithTimeout(lineResolutionTimeout)
-	videoURL, err := resolver.GetVideoURL(episodeURL)
+	videoURL, err := resolver.GetVideoURL(candidate.URL)
 	if err != nil {
 		item.err = fmt.Errorf("解析直链失败: %w", err)
 		return item

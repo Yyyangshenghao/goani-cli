@@ -93,33 +93,27 @@ func PlayEpisodeGroupCLI(application *app.App, src *webselector.WebSelectorSourc
 	return fmt.Errorf("这一集的所有线路都失败了:\n%s", strings.Join(attempts, "\n"))
 }
 
-func showInteractiveSelectionFlow(application *app.App, animes []source.Anime, sourceName string) error {
+func showAggregatedSelectionFlow(application *app.App, animes []source.AggregatedAnime, selectedAnimeIndex int) error {
 	if len(animes) == 0 {
 		return nil
 	}
 
-	src := application.GetSourceByName(sourceName)
-	if src == nil {
-		return fmt.Errorf("无法获取媒体源")
-	}
+	selectedAnimeIndex = clampIndex(selectedAnimeIndex, len(animes))
 
+animeLoop:
 	for {
-		anime, err := tui.RunAnimeSelectionTUI(sourceName, animes)
+		anime := animes[selectedAnimeIndex]
+		groups, err := loadAggregatedEpisodeGroupsTUI(application, anime)
 		if err != nil {
-			return fmt.Errorf("打开番剧选择界面失败: %w", err)
-		}
-		if anime == nil {
-			return nil
-		}
-
-		episodes, err := src.GetEpisodes(anime.URL)
-		if err != nil {
-			showTUIErrorScreen("获取剧集失败", err.Error())
-			continue
-		}
-		groups := source.GroupEpisodes(episodes)
-		if len(groups) == 0 {
-			showTUIErrorScreen("没有可用剧集", "当前番剧没有解析到可播放剧集")
+			showTUIErrorScreen("聚合剧集失败", err.Error())
+			nextAnime, nextIndex, err := tui.RunAggregatedAnimeSelectionTUI(animes, selectedAnimeIndex)
+			if err != nil {
+				return fmt.Errorf("打开聚合番剧列表失败: %w", err)
+			}
+			if nextAnime == nil {
+				return nil
+			}
+			selectedAnimeIndex = nextIndex
 			continue
 		}
 
@@ -132,7 +126,15 @@ func showInteractiveSelectionFlow(application *app.App, animes []source.Anime, s
 				return fmt.Errorf("打开选集界面失败: %w", err)
 			}
 			if episode == nil {
-				break
+				nextAnime, nextIndex, err := tui.RunAggregatedAnimeSelectionTUI(animes, selectedAnimeIndex)
+				if err != nil {
+					return fmt.Errorf("打开聚合番剧列表失败: %w", err)
+				}
+				if nextAnime == nil {
+					return nil
+				}
+				selectedAnimeIndex = nextIndex
+				continue animeLoop
 			}
 			selectedEpisodeIndex = episodeIndex
 
@@ -140,7 +142,7 @@ func showInteractiveSelectionFlow(application *app.App, animes []source.Anime, s
 			for {
 				currentEpisode := groups[selectedEpisodeIndex]
 
-				lines, err := loadResolvedEpisodeLinesTUI(src, currentEpisode)
+				lines, err := loadResolvedEpisodeLinesTUI(application, currentEpisode)
 				if err != nil {
 					showTUIErrorScreen("线路解析失败", err.Error())
 					continue episodeLoop
@@ -184,7 +186,15 @@ func showInteractiveSelectionFlow(application *app.App, animes []source.Anime, s
 					case playbackNavigationReturnEpisodeList:
 						continue episodeLoop
 					case playbackNavigationReturnAnimeList:
-						break episodeLoop
+						nextAnime, nextIndex, err := tui.RunAggregatedAnimeSelectionTUI(animes, selectedAnimeIndex)
+						if err != nil {
+							return fmt.Errorf("打开聚合番剧列表失败: %w", err)
+						}
+						if nextAnime == nil {
+							return nil
+						}
+						selectedAnimeIndex = nextIndex
+						continue animeLoop
 					case playbackNavigationExitFlow:
 						return nil
 					default:
@@ -261,10 +271,21 @@ func playResolvedEpisodeCandidateTUI(application *app.App, group source.EpisodeG
 
 func episodeCandidateLabel(group source.EpisodeGroup, index int, candidate source.EpisodeCandidate) string {
 	name := strings.TrimSpace(candidate.Name)
-	if name == "" || name == group.Name {
-		return fmt.Sprintf("线路%d", index+1)
+	sourceName := strings.TrimSpace(candidate.SourceName)
+
+	switch {
+	case name == "" || name == group.Name:
+		if sourceName == "" {
+			return fmt.Sprintf("线路%d", index+1)
+		}
+		return fmt.Sprintf("%s / 线路%d", sourceName, index+1)
+	case sourceName == "":
+		return name
+	case strings.Contains(name, sourceName):
+		return name
+	default:
+		return fmt.Sprintf("%s / %s", sourceName, name)
 	}
-	return name
 }
 
 func showTUIErrorScreen(title, message string) {
@@ -273,13 +294,13 @@ func showTUIErrorScreen(title, message string) {
 	}
 }
 
-func loadResolvedEpisodeLinesTUI(src *webselector.WebSelectorSource, group source.EpisodeGroup) ([]resolvedEpisodeCandidate, error) {
+func loadResolvedEpisodeLinesTUI(application *app.App, group source.EpisodeGroup) ([]resolvedEpisodeCandidate, error) {
 	var lines []resolvedEpisodeCandidate
 	err := tui.RunLoadingTUI(
 		"正在解析线路",
 		"正在获取视频链接和清晰度，最长等待 5 秒",
 		func() error {
-			lines = resolveEpisodeCandidates(src, group)
+			lines = resolveEpisodeCandidates(application, group)
 			return nil
 		},
 	)
@@ -290,6 +311,76 @@ func loadResolvedEpisodeLinesTUI(src *webselector.WebSelectorSource, group sourc
 		return nil, fmt.Errorf("当前剧集没有解析到可用线路")
 	}
 	return lines, nil
+}
+
+func loadAggregatedEpisodeGroupsTUI(application *app.App, anime source.AggregatedAnime) ([]source.EpisodeGroup, error) {
+	var groups []source.EpisodeGroup
+	err := tui.RunLoadingTUI(
+		"正在聚合剧集",
+		"正在从多个片源汇总剧集和线路，稍等一下",
+		func() error {
+			var loadErr error
+			groups, loadErr = loadAggregatedEpisodeGroups(application, anime)
+			return loadErr
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if len(groups) == 0 {
+		return nil, fmt.Errorf("当前番剧没有解析到可播放剧集")
+	}
+	return groups, nil
+}
+
+func loadAggregatedEpisodeGroups(application *app.App, anime source.AggregatedAnime) ([]source.EpisodeGroup, error) {
+	if len(anime.Hits) == 0 {
+		return nil, nil
+	}
+
+	type episodeFetchMessage struct {
+		sourceName string
+		episodes   []source.Episode
+		err        error
+	}
+
+	resultCh := make(chan episodeFetchMessage, len(anime.Hits))
+	for _, hit := range anime.Hits {
+		go func(hit source.AnimeHit) {
+			src := application.GetSourceByName(hit.SourceName)
+			if src == nil {
+				resultCh <- episodeFetchMessage{
+					sourceName: hit.SourceName,
+					err:        fmt.Errorf("未找到媒体源"),
+				}
+				return
+			}
+
+			episodes, err := src.GetEpisodes(hit.Anime.URL)
+			resultCh <- episodeFetchMessage{
+				sourceName: hit.SourceName,
+				episodes:   episodes,
+				err:        err,
+			}
+		}(hit)
+	}
+
+	aggregatedEpisodes := make([]source.Episode, 0)
+	var failures []string
+	for range anime.Hits {
+		result := <-resultCh
+		if result.err != nil {
+			failures = append(failures, fmt.Sprintf("%s: %v", result.sourceName, result.err))
+			continue
+		}
+		aggregatedEpisodes = append(aggregatedEpisodes, withEpisodeSourceName(result.sourceName, result.episodes)...)
+	}
+
+	groups := source.GroupEpisodes(aggregatedEpisodes)
+	if len(groups) == 0 && len(failures) > 0 {
+		return nil, fmt.Errorf("所有片源都获取剧集失败了:\n%s", strings.Join(failures, "\n"))
+	}
+	return groups, nil
 }
 
 func resolvePlaybackNavigation(action tui.PlaybackAction, currentEpisodeIndex, totalEpisodes int) playbackNavigationResult {
@@ -318,6 +409,28 @@ func resolvePlaybackNavigation(action tui.PlaybackAction, currentEpisodeIndex, t
 	}
 
 	return result
+}
+
+func withEpisodeSourceName(sourceName string, episodes []source.Episode) []source.Episode {
+	tagged := make([]source.Episode, len(episodes))
+	for i, episode := range episodes {
+		tagged[i] = episode
+		tagged[i].SourceName = sourceName
+	}
+	return tagged
+}
+
+func clampIndex(index, total int) int {
+	if total <= 0 {
+		return 0
+	}
+	if index < 0 {
+		return 0
+	}
+	if index >= total {
+		return total - 1
+	}
+	return index
 }
 
 // playWithRequestContext 会根据播放器和线路格式决定是否启用兼容层。
