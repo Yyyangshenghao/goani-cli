@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -194,7 +195,19 @@ func (p *hlsProxy) rewritePlaylist(target string, body []byte, host string) ([]b
 	lines := strings.Split(strings.ReplaceAll(string(body), "\r\n", "\n"), "\n")
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+		if trimmed == "" {
+			continue
+		}
+
+		rewrittenTagLine, changed, err := rewritePlaylistTagURIs(line, base, host)
+		if err != nil {
+			return nil, err
+		}
+		if changed {
+			lines[i] = rewrittenTagLine
+			continue
+		}
+		if strings.HasPrefix(trimmed, "#") {
 			continue
 		}
 
@@ -203,10 +216,49 @@ func (p *hlsProxy) rewritePlaylist(target string, body []byte, host string) ([]b
 			continue
 		}
 
-		lines[i] = fmt.Sprintf("http://%s/proxy?u=%s", host, url.QueryEscape(resolved.String()))
+		lines[i] = localProxyURL(host, resolved.String())
 	}
 
 	return []byte(strings.Join(lines, "\n")), nil
+}
+
+var playlistURIPattern = regexp.MustCompile(`URI="([^"]+)"`)
+
+func rewritePlaylistTagURIs(line string, base *url.URL, host string) (string, bool, error) {
+	if !strings.Contains(line, `URI="`) {
+		return line, false, nil
+	}
+
+	var rewriteErr error
+	changed := false
+	rewritten := playlistURIPattern.ReplaceAllStringFunc(line, func(match string) string {
+		if rewriteErr != nil {
+			return match
+		}
+
+		submatches := playlistURIPattern.FindStringSubmatch(match)
+		if len(submatches) < 2 {
+			return match
+		}
+
+		resolved, err := base.Parse(strings.TrimSpace(submatches[1]))
+		if err != nil {
+			rewriteErr = err
+			return match
+		}
+
+		changed = true
+		return fmt.Sprintf(`URI="%s"`, localProxyURL(host, resolved.String()))
+	})
+	if rewriteErr != nil {
+		return "", false, rewriteErr
+	}
+
+	return rewritten, changed, nil
+}
+
+func localProxyURL(host, target string) string {
+	return fmt.Sprintf("http://%s/proxy?u=%s", host, url.QueryEscape(target))
 }
 
 func (p *hlsProxy) touch() {
@@ -234,9 +286,6 @@ func (p *hlsProxy) shutdownWhenIdle(server *http.Server) {
 
 func copyHeaders(dst, src http.Header) {
 	for key, values := range src {
-		if strings.EqualFold(key, "Content-Length") {
-			continue
-		}
 		for _, value := range values {
 			dst.Add(key, value)
 		}
