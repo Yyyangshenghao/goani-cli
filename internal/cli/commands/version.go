@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"fmt"
+
 	"github.com/Yyyangshenghao/goani-cli/internal/version"
 )
 
@@ -23,7 +25,7 @@ func (c *VersionCommand) ShortDesc() string {
 
 // Run 执行命令
 func (c *VersionCommand) Run(args []string) {
-	print(version.Info())
+	fmt.Println(version.Info())
 }
 
 // Usage 返回使用说明

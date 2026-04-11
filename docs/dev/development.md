@@ -54,16 +54,24 @@ goani-cli/
 - Go 1.22+
 - 如果使用 `make`，需要 GNU Make 和 Bash 兼容环境
 
+### 构建产物规范
+
+- 仓库内保留型构建产物统一放在 `bin/`。
+- 临时验证用的二进制建议输出到系统临时目录，例如 Windows 下用 `$env:TEMP`。
+- 不建议在仓库根目录直接生成 `goani` 或 `goani.exe`，避免和源码、文档混在一起。
+
 ### 本地构建
 
 ```bash
-go build -o goani ./cmd/goani
+mkdir -p bin
+go build -o ./bin/goani ./cmd/goani
 ```
 
 Windows PowerShell：
 
 ```powershell
-go build -o goani.exe .\cmd\goani
+New-Item -ItemType Directory -Force .\bin | Out-Null
+go build -o .\bin\goani.exe .\cmd\goani
 ```
 
 ### 使用 Makefile
@@ -84,11 +92,12 @@ go test ./...
 ### 版本信息注入
 
 ```bash
+mkdir -p bin
 go build -ldflags="-s -w \
   -X github.com/Yyyangshenghao/goani-cli/internal/version.Version=v0.1.0 \
   -X github.com/Yyyangshenghao/goani-cli/internal/version.GitCommit=$(git rev-parse --short HEAD) \
   -X github.com/Yyyangshenghao/goani-cli/internal/version.BuildDate=$(date -u '+%Y-%m-%d_%H:%M:%S')" \
-  -o goani ./cmd/goani
+  -o ./bin/goani ./cmd/goani
 ```
 
 PowerShell 示例：
@@ -97,8 +106,9 @@ PowerShell 示例：
 $version = "v0.1.0"
 $gitCommit = git rev-parse --short HEAD
 $buildDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd_HH:mm:ss")
+New-Item -ItemType Directory -Force .\bin | Out-Null
 
-go build -ldflags "-s -w -X github.com/Yyyangshenghao/goani-cli/internal/version.Version=$version -X github.com/Yyyangshenghao/goani-cli/internal/version.GitCommit=$gitCommit -X github.com/Yyyangshenghao/goani-cli/internal/version.BuildDate=$buildDate" -o goani.exe .\cmd\goani
+go build -ldflags "-s -w -X github.com/Yyyangshenghao/goani-cli/internal/version.Version=$version -X github.com/Yyyangshenghao/goani-cli/internal/version.GitCommit=$gitCommit -X github.com/Yyyangshenghao/goani-cli/internal/version.BuildDate=$buildDate" -o .\bin\goani.exe .\cmd\goani
 ```
 
 ---
@@ -117,6 +127,18 @@ go build -ldflags "-s -w -X github.com/Yyyangshenghao/goani-cli/internal/version
 ```bash
 go test ./...
 ```
+
+基础静态检查：
+
+```bash
+go vet ./...
+```
+
+CI 会在 push / pull request 上自动执行：
+
+- `go test ./...`
+- `go vet ./...`
+- `go build -o <temp> ./cmd/goani`
 
 ### 手动调试入口
 
