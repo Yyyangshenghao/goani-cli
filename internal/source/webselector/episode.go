@@ -80,6 +80,10 @@ func (s *WebSelectorSource) parseChannelFormatNoChannel(doc *goquery.Document, c
 
 // parseEpisodeNumber 先走源配置里的集数规则，失败后再用通用数字提取兜底。
 func parseEpisodeNumber(name, pattern string) (string, float64, bool) {
+	if looksLikeEpisodeRange(name) {
+		return "", 0, false
+	}
+
 	if value := extractEpisodeNumberWithPattern(name, pattern); value != "" {
 		if parsed, err := strconv.ParseFloat(value, 64); err == nil {
 			return strconv.FormatFloat(parsed, 'f', -1, 64), parsed, true
@@ -103,6 +107,12 @@ func parseEpisodeNumber(name, pattern string) (string, float64, bool) {
 	}
 
 	return strconv.FormatFloat(parsed, 'f', -1, 64), parsed, true
+}
+
+func looksLikeEpisodeRange(name string) bool {
+	re := regexp2.MustCompile(`\d+\s*[-~～—]+\s*\d+`, regexp2.None)
+	match, err := re.FindStringMatch(name)
+	return err == nil && match != nil
 }
 
 // extractEpisodeNumberWithPattern 兼容 animeko-source 这类配置里的正则规则。
