@@ -49,7 +49,7 @@ func (p *MPVPlayer) Play(url string) error {
 
 // PlayWithArgs 带参数播放
 func (p *MPVPlayer) PlayWithArgs(url string, args []string) error {
-	cmdArgs := append([]string{url}, args...)
+	cmdArgs := mpvCommandArgs(url, args)
 	cmd := exec.Command(p.path, cmdArgs...)
 	return cmd.Start()
 }
@@ -57,4 +57,10 @@ func (p *MPVPlayer) PlayWithArgs(url string, args []string) error {
 // IsAvailable 检查播放器是否可用
 func (p *MPVPlayer) IsAvailable() bool {
 	return p.path != ""
+}
+
+func mpvCommandArgs(url string, args []string) []string {
+	cmdArgs := append([]string{}, args...)
+	cmdArgs = append(cmdArgs, url)
+	return cmdArgs
 }

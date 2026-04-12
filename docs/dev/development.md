@@ -41,7 +41,7 @@ goani-cli/
 
 - `internal/ui/console` 负责传统命令行交互。
 - `internal/ui/tui` 负责 TUI 页面。
-- `internal/player/hlsproxy.go` 负责 `m3u8` 本地代理兼容层。
+- `internal/player/hlsproxy.go` 和相关 HLS 工具负责统一的 `m3u8` 本地兼容层，包括 playlist 改写、短时分片缓存、请求去重和轻量预取。
 - `internal/source/episode_group.go` 负责剧集归类和重复线路合并。
 - `internal/cli/commands` 尽量只保留命令入口，跨层流程已经开始下沉到 `internal/workflow`。
 
@@ -237,7 +237,7 @@ go test ./internal/player -run TestManualPlayerPlaybackMatrix -v
 
 - 搜索后串起选番、选集、线路选择和播放
 - 配置页的保存回调
-- `PotPlayer + m3u8` 的本地代理播放
+- `m3u8` 的统一本地兼容层播放
 
 ### 媒体源与播放器
 
@@ -253,7 +253,7 @@ go test ./internal/player -run TestManualPlayerPlaybackMatrix -v
 - `GroupEpisodes` 优先按数字归类，再兜底到标题。
 - `goani config player <name> <path>` 只保存路径，不自动设置默认播放器。
 - `goani play` 会在真正播放时补默认播放器。
-- `PotPlayer + m3u8` 会优先走本地代理。
+- 所有 `m3u8` 线路都会优先走统一的本地 HLS 兼容层。
 
 ---
 

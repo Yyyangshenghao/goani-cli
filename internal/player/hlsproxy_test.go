@@ -6,7 +6,9 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestRewritePlaylistRewritesRelativeAndAbsoluteLinks(t *testing.T) {
@@ -151,4 +153,131 @@ func TestServeUpstreamPreservesContentLengthForBinaryResponse(t *testing.T) {
 	if rec.Body.String() != upstreamBody {
 		t.Fatalf("unexpected body: got %q want %q", rec.Body.String(), upstreamBody)
 	}
+}
+
+func TestServeUpstreamCachesSegmentResponses(t *testing.T) {
+	var upstreamHits int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&upstreamHits, 1)
+		w.Header().Set("Content-Type", "video/mp2t")
+		_, _ = io.WriteString(w, "segment-data")
+	}))
+	defer upstream.Close()
+
+	proxy := &hlsProxy{
+		client: upstream.Client(),
+	}
+
+	firstReq := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/proxy", nil)
+	firstRec := httptest.NewRecorder()
+	proxy.serveUpstream(firstRec, firstReq, upstream.URL+"/segment.ts")
+
+	secondReq := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/proxy", nil)
+	secondRec := httptest.NewRecorder()
+	proxy.serveUpstream(secondRec, secondReq, upstream.URL+"/segment.ts")
+
+	if got := firstRec.Body.String(); got != "segment-data" {
+		t.Fatalf("unexpected first response body: got %q", got)
+	}
+	if got := secondRec.Body.String(); got != "segment-data" {
+		t.Fatalf("unexpected second response body: got %q", got)
+	}
+	if got := atomic.LoadInt32(&upstreamHits); got != 1 {
+		t.Fatalf("expected one upstream hit after cached replay, got %d", got)
+	}
+}
+
+func TestServeUpstreamPrefetchesPlaylistAssetsIntoCache(t *testing.T) {
+	var playlistHits int32
+	var initHits int32
+	var segmentHits int32
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/media.m3u8":
+			atomic.AddInt32(&playlistHits, 1)
+			w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+			_, _ = io.WriteString(w, "#EXTM3U\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:1.0,\nsegment1.ts\n#EXTINF:1.0,\nsegment2.ts\n#EXT-X-ENDLIST\n")
+		case "/init.mp4":
+			atomic.AddInt32(&initHits, 1)
+			w.Header().Set("Content-Type", "video/mp4")
+			_, _ = io.WriteString(w, "init-data")
+		case "/segment1.ts":
+			atomic.AddInt32(&segmentHits, 1)
+			w.Header().Set("Content-Type", "video/mp2t")
+			_, _ = io.WriteString(w, "segment-1")
+		case "/segment2.ts":
+			atomic.AddInt32(&segmentHits, 1)
+			w.Header().Set("Content-Type", "video/mp2t")
+			_, _ = io.WriteString(w, "segment-2")
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer upstream.Close()
+
+	proxy := &hlsProxy{
+		client: upstream.Client(),
+	}
+
+	playlistReq := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/master.m3u8", nil)
+	playlistReq.Host = "127.0.0.1:9090"
+	playlistRec := httptest.NewRecorder()
+	proxy.serveUpstream(playlistRec, playlistReq, upstream.URL+"/media.m3u8")
+
+	waitForCondition(t, 2*time.Second, func() bool {
+		return atomic.LoadInt32(&initHits) >= 1 && atomic.LoadInt32(&segmentHits) >= 1
+	})
+
+	beforeSegmentHits := atomic.LoadInt32(&segmentHits)
+	segmentReq := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/proxy", nil)
+	segmentRec := httptest.NewRecorder()
+	proxy.serveUpstream(segmentRec, segmentReq, upstream.URL+"/segment1.ts")
+
+	if got := segmentRec.Body.String(); got != "segment-1" {
+		t.Fatalf("unexpected cached segment body: got %q", got)
+	}
+	if got := atomic.LoadInt32(&playlistHits); got != 1 {
+		t.Fatalf("unexpected playlist upstream hits: got %d", got)
+	}
+	if got := atomic.LoadInt32(&segmentHits); got != beforeSegmentHits {
+		t.Fatalf("expected prefetched segment to be served from cache, got upstream hits %d -> %d", beforeSegmentHits, got)
+	}
+}
+
+func TestPrefetchAssetSkipsAlreadyCachedResponse(t *testing.T) {
+	var upstreamHits int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&upstreamHits, 1)
+		w.Header().Set("Content-Type", "video/mp2t")
+		_, _ = io.WriteString(w, "segment-data")
+	}))
+	defer upstream.Close()
+
+	proxy := &hlsProxy{
+		client: upstream.Client(),
+	}
+
+	proxy.prefetchAsset(upstream.URL + "/segment.ts")
+	proxy.prefetchAsset(upstream.URL + "/segment.ts")
+
+	if got := atomic.LoadInt32(&upstreamHits); got != 1 {
+		t.Fatalf("expected cached prefetch to avoid duplicate upstream fetch, got %d", got)
+	}
+	if cached := proxy.loadCacheEntry(upstream.URL+"/segment.ts", ""); cached == nil {
+		t.Fatalf("expected prefetched segment to be cached")
+	}
+}
+
+func waitForCondition(t *testing.T, timeout time.Duration, condition func() bool) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if condition() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("condition not met within %s", timeout)
 }

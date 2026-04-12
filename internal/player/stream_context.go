@@ -125,3 +125,24 @@ func applyStreamRequestContext(req *http.Request, ctx StreamRequestContext) {
 		req.Header.Set(header.key, header.value)
 	}
 }
+
+// MPVHTTPArgs 把请求上下文转换成 mpv 可识别的网络参数。
+func (c StreamRequestContext) MPVHTTPArgs() []string {
+	userAgent, referer, cookies, extras := c.effectiveHeaders()
+	args := make([]string, 0, 4+len(extras))
+
+	if userAgent != "" {
+		args = append(args, "--user-agent="+userAgent)
+	}
+	if referer != "" {
+		args = append(args, "--referrer="+referer)
+	}
+	if cookies != "" {
+		args = append(args, "--http-header-fields-append=Cookie: "+cookies)
+	}
+	for _, header := range extras {
+		args = append(args, "--http-header-fields-append="+header.key+": "+header.value)
+	}
+
+	return args
+}

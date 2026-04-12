@@ -187,18 +187,20 @@ func parsePlayerFilter(raw string) map[string]struct{} {
 
 func startPlaybackURLForSample(sample PlaybackSample) (string, error) {
 	requestContext := sample.StreamRequestContext(testPlaybackUserAgent)
-	if _, err := ffmpegLookPath("ffmpeg"); err == nil {
-		localURL, err := startInProcessPlaybackServer(func(out io.Writer) error {
-			return ServeFFmpegHLSBridge(requestContext, out)
-		})
-		if err == nil {
-			return localURL, nil
-		}
-	}
-
-	return startInProcessPlaybackServer(func(out io.Writer) error {
+	localURL, err := startInProcessPlaybackServer(func(out io.Writer) error {
 		return ServeHLSProxy(requestContext, out)
 	})
+	if err == nil {
+		return localURL, nil
+	}
+
+	if _, ffmpegErr := ffmpegLookPath("ffmpeg"); ffmpegErr == nil {
+		return startInProcessPlaybackServer(func(out io.Writer) error {
+			return ServeFFmpegHLSBridge(requestContext, out)
+		})
+	}
+
+	return "", err
 }
 
 func sampleDisplayName(sample PlaybackSample) string {

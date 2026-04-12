@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/Yyyangshenghao/goani-cli/internal/player"
@@ -138,7 +139,7 @@ func TestEpisodeCandidateLabel(t *testing.T) {
 	}
 }
 
-func TestPlayWithRequestContextPrefersFFmpegBridgeForM3U8(t *testing.T) {
+func TestPlayWithRequestContextPrefersHLSProxyForM3U8(t *testing.T) {
 	oldFFmpeg := startDetachedFFmpegHLSBridge
 	oldProxy := startDetachedHLSProxy
 	t.Cleanup(func() {
@@ -147,14 +148,14 @@ func TestPlayWithRequestContextPrefersFFmpegBridgeForM3U8(t *testing.T) {
 	})
 
 	startDetachedFFmpegHLSBridge = func(ctx player.StreamRequestContext) (string, error) {
+		t.Fatalf("ffmpeg bridge should not be used when HLS proxy succeeds")
+		return "", nil
+	}
+	startDetachedHLSProxy = func(ctx player.StreamRequestContext) (string, error) {
 		if ctx.SourceURL != "https://media.example.com/master.m3u8" {
 			t.Fatalf("unexpected source url: got %q", ctx.SourceURL)
 		}
-		return "http://127.0.0.1:9000/live.ts", nil
-	}
-	startDetachedHLSProxy = func(ctx player.StreamRequestContext) (string, error) {
-		t.Fatalf("proxy should not be used when ffmpeg bridge succeeds")
-		return "", nil
+		return "http://127.0.0.1:9000/master.m3u8", nil
 	}
 
 	p := &fakePlaybackPlayer{}
@@ -164,12 +165,77 @@ func TestPlayWithRequestContextPrefersFFmpegBridgeForM3U8(t *testing.T) {
 	if err != nil {
 		t.Fatalf("playWithRequestContext returned error: %v", err)
 	}
-	if len(p.played) != 1 || p.played[0] != "http://127.0.0.1:9000/live.ts" {
+	if len(p.played) != 1 || p.played[0] != "http://127.0.0.1:9000/master.m3u8" {
 		t.Fatalf("unexpected played urls: %v", p.played)
 	}
 }
 
-func TestPlayWithRequestContextFallsBackToProxyWhenFFmpegFails(t *testing.T) {
+func TestPlayWithRequestContextFallsBackToNativeMPVWhenProxyFails(t *testing.T) {
+	oldFFmpeg := startDetachedFFmpegHLSBridge
+	oldProxy := startDetachedHLSProxy
+	t.Cleanup(func() {
+		startDetachedFFmpegHLSBridge = oldFFmpeg
+		startDetachedHLSProxy = oldProxy
+	})
+
+	startDetachedFFmpegHLSBridge = func(ctx player.StreamRequestContext) (string, error) {
+		t.Fatalf("ffmpeg bridge should not be used when mpv native fallback succeeds")
+		return "", nil
+	}
+	startDetachedHLSProxy = func(ctx player.StreamRequestContext) (string, error) {
+		return "", errors.New("proxy unavailable")
+	}
+
+	p := &fakePlaybackPlayer{name: "mpv"}
+	err := playWithRequestContext(p, player.StreamRequestContext{
+		SourceURL: "https://media.example.com/master.m3u8",
+		Referer:   "https://anime.example.com/watch/1",
+		UserAgent: "goani-agent",
+		Cookies:   "session=abc123",
+		Headers: map[string]string{
+			"X-Trace-ID": "trace-001",
+		},
+	})
+	if err != nil {
+		t.Fatalf("playWithRequestContext returned error: %v", err)
+	}
+	if len(p.played) != 1 || p.played[0] != "https://media.example.com/master.m3u8" {
+		t.Fatalf("unexpected played urls: %v", p.played)
+	}
+	assertStringSliceContains(t, p.args[0], "--user-agent=goani-agent")
+	assertStringSliceContains(t, p.args[0], "--referrer=https://anime.example.com/watch/1")
+	assertStringSliceContains(t, p.args[0], "--http-header-fields-append=Cookie: session=abc123")
+	assertStringSliceContains(t, p.args[0], "--http-header-fields-append=X-Trace-ID: trace-001")
+}
+
+func TestPlayWithRequestContextFallsBackToFFmpegWhenProxyFails(t *testing.T) {
+	oldFFmpeg := startDetachedFFmpegHLSBridge
+	oldProxy := startDetachedHLSProxy
+	t.Cleanup(func() {
+		startDetachedFFmpegHLSBridge = oldFFmpeg
+		startDetachedHLSProxy = oldProxy
+	})
+
+	startDetachedFFmpegHLSBridge = func(ctx player.StreamRequestContext) (string, error) {
+		return "http://127.0.0.1:9001/live.ts", nil
+	}
+	startDetachedHLSProxy = func(ctx player.StreamRequestContext) (string, error) {
+		return "", errors.New("proxy unavailable")
+	}
+
+	p := &fakePlaybackPlayer{}
+	err := playWithRequestContext(p, player.StreamRequestContext{
+		SourceURL: "https://media.example.com/master.m3u8",
+	})
+	if err != nil {
+		t.Fatalf("playWithRequestContext returned error: %v", err)
+	}
+	if len(p.played) != 1 || p.played[0] != "http://127.0.0.1:9001/live.ts" {
+		t.Fatalf("unexpected played urls: %v", p.played)
+	}
+}
+
+func TestPlayWithRequestContextReturnsCombinedM3U8FallbackError(t *testing.T) {
 	oldFFmpeg := startDetachedFFmpegHLSBridge
 	oldProxy := startDetachedHLSProxy
 	t.Cleanup(func() {
@@ -181,26 +247,34 @@ func TestPlayWithRequestContextFallsBackToProxyWhenFFmpegFails(t *testing.T) {
 		return "", errors.New("ffmpeg unavailable")
 	}
 	startDetachedHLSProxy = func(ctx player.StreamRequestContext) (string, error) {
-		return "http://127.0.0.1:9001/master.m3u8", nil
+		return "", errors.New("proxy unavailable")
 	}
 
 	p := &fakePlaybackPlayer{}
 	err := playWithRequestContext(p, player.StreamRequestContext{
 		SourceURL: "https://media.example.com/master.m3u8",
 	})
-	if err != nil {
-		t.Fatalf("playWithRequestContext returned error: %v", err)
+	if err == nil {
+		t.Fatalf("expected combined fallback error")
 	}
-	if len(p.played) != 1 || p.played[0] != "http://127.0.0.1:9001/master.m3u8" {
+	if !strings.Contains(err.Error(), "启动本地 HLS 代理失败") || !strings.Contains(err.Error(), "启动 ffmpeg 桥接失败") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(p.played) != 0 {
 		t.Fatalf("unexpected played urls: %v", p.played)
 	}
 }
 
 type fakePlaybackPlayer struct {
+	name   string
 	played []string
+	args   [][]string
 }
 
 func (p *fakePlaybackPlayer) Name() string {
+	if p.name != "" {
+		return p.name
+	}
 	return "fake"
 }
 
@@ -211,5 +285,16 @@ func (p *fakePlaybackPlayer) Play(url string) error {
 
 func (p *fakePlaybackPlayer) PlayWithArgs(url string, args []string) error {
 	p.played = append(p.played, url)
+	p.args = append(p.args, append([]string{}, args...))
 	return nil
+}
+
+func assertStringSliceContains(t *testing.T, items []string, expected string) {
+	t.Helper()
+	for _, item := range items {
+		if item == expected {
+			return
+		}
+	}
+	t.Fatalf("expected %q in %v", expected, items)
 }

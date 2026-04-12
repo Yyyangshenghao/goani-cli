@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Yyyangshenghao/goani-cli/internal/app"
+	"github.com/Yyyangshenghao/goani-cli/internal/player"
 	"github.com/Yyyangshenghao/goani-cli/internal/source"
 	tui "github.com/Yyyangshenghao/goani-cli/internal/ui/tui"
 )
@@ -219,6 +220,10 @@ func probeM3U8Quality(client *http.Client, playlistURL string) (string, error) {
 	content := string(body)
 	if !strings.Contains(content, "#EXTM3U") {
 		return "", nil
+	}
+
+	if playlistQuality := player.InferM3U8Quality(body); strings.TrimSpace(playlistQuality) != "" {
+		return playlistQuality, nil
 	}
 
 	re := regexp.MustCompile(`RESOLUTION=\d+x(\d+)`)

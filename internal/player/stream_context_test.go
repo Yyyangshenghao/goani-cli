@@ -105,6 +105,26 @@ func TestBuildFFmpegHLSArgsUsesEffectiveHeaders(t *testing.T) {
 	}
 }
 
+func TestMPVHTTPArgsUsesEffectiveHeaders(t *testing.T) {
+	args := StreamRequestContext{
+		SourceURL: "https://media.example.com/master.m3u8",
+		Referer:   "https://anime.example.com/watch/1",
+		UserAgent: "goani-default-agent",
+		Cookies:   "session=abc123",
+		Headers: map[string]string{
+			"Referer":    "https://cdn.example.com/override",
+			"User-Agent": "source-specific-agent",
+			"Cookie":     "session=override",
+			"X-Trace-ID": "trace-001",
+		},
+	}.MPVHTTPArgs()
+
+	assertArgsContainSequence(t, args, "--user-agent=source-specific-agent")
+	assertArgsContainSequence(t, args, "--referrer=https://cdn.example.com/override")
+	assertArgsContainSequence(t, args, "--http-header-fields-append=Cookie: session=override")
+	assertArgsContainSequence(t, args, "--http-header-fields-append=X-Trace-ID: trace-001")
+}
+
 func assertArgsContainSequence(t *testing.T, args []string, expected ...string) {
 	t.Helper()
 	for i := 0; i <= len(args)-len(expected); i++ {

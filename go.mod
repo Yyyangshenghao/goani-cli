@@ -3,6 +3,7 @@ module github.com/Yyyangshenghao/goani-cli
 go 1.25.0
 
 require (
+	github.com/Eyevinn/hls-m3u8 v0.6.4
 	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10

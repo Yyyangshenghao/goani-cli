@@ -8,13 +8,23 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"regexp"
+	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
 
-const proxyIdleTimeout = 30 * time.Minute
+const (
+	proxyIdleTimeout      = 30 * time.Minute
+	hlsSegmentCacheTTL    = 2 * time.Minute
+	hlsKeyCacheTTL        = 10 * time.Minute
+	hlsPrefetchTimeout    = 12 * time.Second
+	hlsPrefetchAssetLimit = 4
+	hlsCacheMaxEntries    = 96
+	hlsCacheMaxEntryBytes = 8 << 20
+	hlsCacheMaxBytes      = 64 << 20
+)
 
 // StartDetachedHLSProxy 启动后台 HLS 代理，并返回可交给播放器的本地 m3u8 地址。
 func StartDetachedHLSProxy(ctx StreamRequestContext) (string, error) {
@@ -44,7 +54,9 @@ func ServeHLSProxy(ctx StreamRequestContext, out io.Writer) error {
 	proxy := &hlsProxy{
 		requestContext: ctx,
 		baseURL:        baseURL,
-		client:         &http.Client{Timeout: 20 * time.Second},
+		client:         newHLSProxyHTTPClient(),
+		cacheEntries:   make(map[string]*proxyCacheEntry),
+		inflightFetch:  make(map[string]*proxyInflightFetch),
 		lastAccess:     time.Now().Unix(),
 	}
 
@@ -70,6 +82,41 @@ type hlsProxy struct {
 	baseURL        *url.URL
 	client         *http.Client
 	lastAccess     int64
+	cacheMu        sync.Mutex
+	cacheEntries   map[string]*proxyCacheEntry
+	inflightFetch  map[string]*proxyInflightFetch
+	cacheBytes     int
+}
+
+type proxyCacheEntry struct {
+	response   *proxyUpstreamResponse
+	expiresAt  time.Time
+	lastAccess time.Time
+}
+
+type proxyInflightFetch struct {
+	done     chan struct{}
+	response *proxyUpstreamResponse
+	err      error
+}
+
+type proxyUpstreamResponse struct {
+	statusCode int
+	header     http.Header
+	body       []byte
+}
+
+func newHLSProxyHTTPClient() *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.MaxIdleConns = 32
+	transport.MaxIdleConnsPerHost = 16
+	transport.MaxConnsPerHost = 32
+	transport.IdleConnTimeout = 90 * time.Second
+
+	return &http.Client{
+		Timeout:   20 * time.Second,
+		Transport: transport,
+	}
 }
 
 // routes 暴露两类入口：
@@ -96,118 +143,114 @@ func (p *hlsProxy) routes() http.Handler {
 // serveUpstream 转发单个上游请求，并在遇到 m3u8 时改写其中的链接，
 // 让后续所有子请求继续回到本地代理，而不是直接打到远端站点。
 func (p *hlsProxy) serveUpstream(w http.ResponseWriter, incoming *http.Request, target string) {
+	rangeHeader := strings.TrimSpace(incoming.Header.Get("Range"))
+	if cached := p.loadCacheEntry(target, rangeHeader); cached != nil {
+		p.writeCachedResponse(w, incoming.Method, cached)
+		return
+	}
+
+	var inflight *proxyInflightFetch
+	if rangeHeader == "" && incoming.Method == http.MethodGet {
+		waitingFetch, owner := p.beginInflightFetch(target)
+		if !owner {
+			if cached := p.waitForInflightFetch(incoming.Context(), target, waitingFetch); cached != nil {
+				p.writeCachedResponse(w, incoming.Method, cached)
+				return
+			}
+		} else {
+			inflight = waitingFetch
+		}
+	}
+
 	req, err := http.NewRequestWithContext(incoming.Context(), http.MethodGet, target, nil)
 	if err != nil {
+		p.finishInflightFetch(target, inflight, nil, err)
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
 
 	applyStreamRequestContext(req, p.requestContext)
-	if rangeHeader := strings.TrimSpace(incoming.Header.Get("Range")); rangeHeader != "" {
+	if rangeHeader != "" {
 		req.Header.Set("Range", rangeHeader)
 	}
 
 	resp, err := p.client.Do(req)
 	if err != nil {
+		p.finishInflightFetch(target, inflight, nil, err)
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
 
 	contentType := strings.ToLower(resp.Header.Get("Content-Type"))
-	if strings.Contains(contentType, "mpegurl") || strings.HasSuffix(strings.ToLower(target), ".m3u8") {
+	if shouldInspectAsHLSPlaylist(contentType, target) {
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
+			p.finishInflightFetch(target, inflight, nil, err)
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
-		rewritten, err := p.rewritePlaylist(target, body, incoming.Host)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadGateway)
+
+		if isHLSPlaylistResponse(target, contentType, body) {
+			rewritten, err := p.rewritePlaylist(target, body, incoming.Host)
+			if err != nil {
+				p.finishInflightFetch(target, inflight, nil, err)
+				http.Error(w, err.Error(), http.StatusBadGateway)
+				return
+			}
+
+			copyHeaders(w.Header(), resp.Header)
+			w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+			w.Header().Del("Content-Length")
+			w.WriteHeader(resp.StatusCode)
+			_, _ = io.Copy(w, bytes.NewReader(rewritten))
+			p.prefetchPlaylistAssets(target, body)
+			p.finishInflightFetch(target, inflight, nil, nil)
 			return
 		}
-		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+
+		copyHeaders(w.Header(), resp.Header)
 		w.WriteHeader(resp.StatusCode)
-		_, _ = io.Copy(w, bytes.NewReader(rewritten))
+		_, _ = io.Copy(w, bytes.NewReader(body))
+		p.finishInflightFetch(target, inflight, nil, nil)
 		return
 	}
 
+	cacheable := inflight != nil && isCacheableBinaryResponse(target, contentType, resp.StatusCode)
 	copyHeaders(w.Header(), resp.Header)
+	w.Header().Del("Transfer-Encoding")
 	w.WriteHeader(resp.StatusCode)
-	_, _ = io.Copy(w, resp.Body)
+	if incoming.Method == http.MethodHead {
+		p.finishInflightFetch(target, inflight, nil, nil)
+		return
+	}
+
+	var buffer bytes.Buffer
+	writer := io.Writer(w)
+	if cacheable {
+		writer = io.MultiWriter(w, &buffer)
+	}
+
+	_, copyErr := io.Copy(writer, resp.Body)
+	var cachedResponse *proxyUpstreamResponse
+	if cacheable && copyErr == nil {
+		cachedResponse = &proxyUpstreamResponse{
+			statusCode: resp.StatusCode,
+			header:     resp.Header.Clone(),
+			body:       append([]byte(nil), buffer.Bytes()...),
+		}
+		if !p.storeCacheEntry(target, cachedResponse, cacheTTLForAsset(target, contentType)) {
+			cachedResponse = nil
+		}
+	}
+
+	p.finishInflightFetch(target, inflight, cachedResponse, copyErr)
 }
 
 // rewritePlaylist 会把 playlist 里的相对/绝对资源地址统一改写成本地代理地址，
 // 这样播放器后续访问子 m3u8、ts 分片时，仍然会带上 goani 负责维护的请求上下文。
 func (p *hlsProxy) rewritePlaylist(target string, body []byte, host string) ([]byte, error) {
-	base, err := url.Parse(target)
-	if err != nil {
-		return nil, err
-	}
-
-	lines := strings.Split(strings.ReplaceAll(string(body), "\r\n", "\n"), "\n")
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
-			continue
-		}
-
-		rewrittenTagLine, changed, err := rewritePlaylistTagURIs(line, base, host)
-		if err != nil {
-			return nil, err
-		}
-		if changed {
-			lines[i] = rewrittenTagLine
-			continue
-		}
-		if strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-
-		resolved, err := base.Parse(trimmed)
-		if err != nil {
-			continue
-		}
-
-		lines[i] = localProxyURL(host, resolved.String())
-	}
-
-	return []byte(strings.Join(lines, "\n")), nil
-}
-
-var playlistURIPattern = regexp.MustCompile(`URI="([^"]+)"`)
-
-func rewritePlaylistTagURIs(line string, base *url.URL, host string) (string, bool, error) {
-	if !strings.Contains(line, `URI="`) {
-		return line, false, nil
-	}
-
-	var rewriteErr error
-	changed := false
-	rewritten := playlistURIPattern.ReplaceAllStringFunc(line, func(match string) string {
-		if rewriteErr != nil {
-			return match
-		}
-
-		submatches := playlistURIPattern.FindStringSubmatch(match)
-		if len(submatches) < 2 {
-			return match
-		}
-
-		resolved, err := base.Parse(strings.TrimSpace(submatches[1]))
-		if err != nil {
-			rewriteErr = err
-			return match
-		}
-
-		changed = true
-		return fmt.Sprintf(`URI="%s"`, localProxyURL(host, resolved.String()))
-	})
-	if rewriteErr != nil {
-		return "", false, rewriteErr
-	}
-
-	return rewritten, changed, nil
+	return rewriteHLSPlaylist(target, body, host)
 }
 
 func localProxyURL(host, target string) string {
@@ -243,4 +286,285 @@ func copyHeaders(dst, src http.Header) {
 			dst.Add(key, value)
 		}
 	}
+}
+
+func shouldInspectAsHLSPlaylist(contentType, target string) bool {
+	if strings.Contains(contentType, "mpegurl") || strings.HasSuffix(strings.ToLower(target), ".m3u8") {
+		return true
+	}
+	return strings.HasPrefix(contentType, "text/")
+}
+
+func isHLSPlaylistResponse(target, contentType string, body []byte) bool {
+	if strings.Contains(contentType, "mpegurl") || strings.HasSuffix(strings.ToLower(target), ".m3u8") {
+		return true
+	}
+	return isHLSPlaylistBody(body)
+}
+
+func (p *hlsProxy) writeCachedResponse(w http.ResponseWriter, method string, response *proxyUpstreamResponse) {
+	if response == nil {
+		return
+	}
+
+	copyHeaders(w.Header(), response.header)
+	w.Header().Del("Transfer-Encoding")
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(response.body)))
+	w.WriteHeader(response.statusCode)
+	if method == http.MethodHead {
+		return
+	}
+	_, _ = io.Copy(w, bytes.NewReader(response.body))
+}
+
+func (p *hlsProxy) loadCacheEntry(target, rangeHeader string) *proxyUpstreamResponse {
+	if rangeHeader != "" {
+		return nil
+	}
+
+	p.cacheMu.Lock()
+	defer p.cacheMu.Unlock()
+	p.ensureCacheStateLocked()
+
+	entry, ok := p.cacheEntries[target]
+	if !ok {
+		return nil
+	}
+	if time.Now().After(entry.expiresAt) {
+		p.removeCacheEntryLocked(target)
+		return nil
+	}
+
+	entry.lastAccess = time.Now()
+	return entry.response
+}
+
+func (p *hlsProxy) storeCacheEntry(target string, response *proxyUpstreamResponse, ttl time.Duration) bool {
+	if response == nil || ttl <= 0 {
+		return false
+	}
+	if len(response.body) == 0 || len(response.body) > hlsCacheMaxEntryBytes {
+		return false
+	}
+
+	p.cacheMu.Lock()
+	defer p.cacheMu.Unlock()
+	p.ensureCacheStateLocked()
+
+	if existing, ok := p.cacheEntries[target]; ok {
+		p.cacheBytes -= len(existing.response.body)
+	}
+
+	p.cacheEntries[target] = &proxyCacheEntry{
+		response:   response,
+		expiresAt:  time.Now().Add(ttl),
+		lastAccess: time.Now(),
+	}
+	p.cacheBytes += len(response.body)
+	p.pruneCacheLocked()
+	return true
+}
+
+func (p *hlsProxy) beginInflightFetch(target string) (*proxyInflightFetch, bool) {
+	p.cacheMu.Lock()
+	defer p.cacheMu.Unlock()
+	p.ensureCacheStateLocked()
+
+	if fetch, ok := p.inflightFetch[target]; ok {
+		return fetch, false
+	}
+
+	fetch := &proxyInflightFetch{done: make(chan struct{})}
+	p.inflightFetch[target] = fetch
+	return fetch, true
+}
+
+func (p *hlsProxy) waitForInflightFetch(ctx context.Context, target string, fetch *proxyInflightFetch) *proxyUpstreamResponse {
+	if fetch == nil {
+		return nil
+	}
+
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-fetch.done:
+		if fetch.response != nil {
+			return fetch.response
+		}
+		return p.loadCacheEntry(target, "")
+	}
+}
+
+func (p *hlsProxy) finishInflightFetch(target string, fetch *proxyInflightFetch, response *proxyUpstreamResponse, err error) {
+	if fetch == nil {
+		return
+	}
+
+	p.cacheMu.Lock()
+	defer p.cacheMu.Unlock()
+	p.ensureCacheStateLocked()
+
+	delete(p.inflightFetch, target)
+	fetch.response = response
+	fetch.err = err
+	close(fetch.done)
+}
+
+func (p *hlsProxy) ensureCacheStateLocked() {
+	if p.cacheEntries == nil {
+		p.cacheEntries = make(map[string]*proxyCacheEntry)
+	}
+	if p.inflightFetch == nil {
+		p.inflightFetch = make(map[string]*proxyInflightFetch)
+	}
+}
+
+func (p *hlsProxy) pruneCacheLocked() {
+	now := time.Now()
+	for target, entry := range p.cacheEntries {
+		if now.After(entry.expiresAt) {
+			p.removeCacheEntryLocked(target)
+		}
+	}
+
+	for len(p.cacheEntries) > hlsCacheMaxEntries || p.cacheBytes > hlsCacheMaxBytes {
+		oldestTarget := ""
+		var oldestTime time.Time
+		for target, entry := range p.cacheEntries {
+			if oldestTarget == "" || entry.lastAccess.Before(oldestTime) {
+				oldestTarget = target
+				oldestTime = entry.lastAccess
+			}
+		}
+		if oldestTarget == "" {
+			return
+		}
+		p.removeCacheEntryLocked(oldestTarget)
+	}
+}
+
+func (p *hlsProxy) removeCacheEntryLocked(target string) {
+	entry, ok := p.cacheEntries[target]
+	if !ok {
+		return
+	}
+	p.cacheBytes -= len(entry.response.body)
+	delete(p.cacheEntries, target)
+}
+
+func (p *hlsProxy) prefetchPlaylistAssets(target string, body []byte) {
+	targets, err := collectHLSPrefetchTargets(target, body, hlsPrefetchAssetLimit)
+	if err != nil || len(targets) == 0 {
+		return
+	}
+
+	go func() {
+		for _, assetTarget := range targets {
+			p.prefetchAsset(assetTarget)
+		}
+	}()
+}
+
+func (p *hlsProxy) prefetchAsset(target string) {
+	if p.loadCacheEntry(target, "") != nil {
+		return
+	}
+
+	fetch, owner := p.beginInflightFetch(target)
+	if !owner {
+		return
+	}
+	if cached := p.loadCacheEntry(target, ""); cached != nil {
+		p.finishInflightFetch(target, fetch, cached, nil)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), hlsPrefetchTimeout)
+	defer cancel()
+
+	response, err := p.fetchBinaryAsset(ctx, target)
+	if err == nil && response != nil {
+		contentType := strings.ToLower(response.header.Get("Content-Type"))
+		if !p.storeCacheEntry(target, response, cacheTTLForAsset(target, contentType)) {
+			response = nil
+		}
+	}
+
+	p.finishInflightFetch(target, fetch, response, err)
+}
+
+func (p *hlsProxy) fetchBinaryAsset(ctx context.Context, target string) (*proxyUpstreamResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	applyStreamRequestContext(req, p.requestContext)
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	contentType := strings.ToLower(resp.Header.Get("Content-Type"))
+	if !isCacheableBinaryResponse(target, contentType, resp.StatusCode) {
+		return nil, fmt.Errorf("uncacheable prefetch response")
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	return &proxyUpstreamResponse{
+		statusCode: resp.StatusCode,
+		header:     resp.Header.Clone(),
+		body:       body,
+	}, nil
+}
+
+func isCacheableBinaryResponse(target, contentType string, statusCode int) bool {
+	if statusCode != http.StatusOK {
+		return false
+	}
+	return cacheTTLForAsset(target, contentType) > 0
+}
+
+func cacheTTLForAsset(target, contentType string) time.Duration {
+	switch classifyAssetKind(target, contentType) {
+	case "key":
+		return hlsKeyCacheTTL
+	case "media":
+		return hlsSegmentCacheTTL
+	default:
+		return 0
+	}
+}
+
+func classifyAssetKind(target, contentType string) string {
+	ext := strings.ToLower(filepath.Ext(pathFromTarget(target)))
+	switch ext {
+	case ".key":
+		return "key"
+	case ".ts", ".m4s", ".m4a", ".m4v", ".mp4", ".aac", ".mp3", ".cmfa", ".cmfv", ".vtt", ".webvtt":
+		return "media"
+	}
+
+	switch {
+	case strings.HasPrefix(contentType, "video/"), strings.HasPrefix(contentType, "audio/"):
+		return "media"
+	case strings.Contains(contentType, "mp4"), strings.Contains(contentType, "mpeg"), strings.Contains(contentType, "octet-stream"), strings.Contains(contentType, "webvtt"):
+		return "media"
+	default:
+		return ""
+	}
+}
+
+func pathFromTarget(target string) string {
+	parsed, err := url.Parse(target)
+	if err != nil {
+		return target
+	}
+	return parsed.Path
 }

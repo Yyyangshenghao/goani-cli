@@ -92,7 +92,7 @@ func resolvePlaybackNavigation(action tui.PlaybackAction, currentEpisodeIndex, t
 
 // playWithRequestContext 会根据线路格式决定是否启用兼容层。
 // 很多站点的 m3u8/分片请求依赖 Referer、User-Agent、Cookie 或额外请求头，
-// 所以这里会优先交给 ffmpeg 拉流，再回退到本地 HLS 代理兜底。
+// 这里统一优先走 goani 自己的本地 HLS 代理，再回退到播放器原生 / ffmpeg。
 func playWithRequestContext(p interface {
 	Name() string
 	Play(string) error
@@ -100,16 +100,28 @@ func playWithRequestContext(p interface {
 }, requestContext player.StreamRequestContext) error {
 	requestContext = requestContext.Normalized()
 	if detectMediaFormat(requestContext.SourceURL) == "m3u8" {
+		proxiedURL, proxyErr := startDetachedHLSProxy(requestContext)
+		if proxyErr == nil {
+			return p.Play(proxiedURL)
+		}
+
+		var nativeErr error
+		if p.Name() == "mpv" {
+			if err := p.PlayWithArgs(requestContext.SourceURL, requestContext.MPVHTTPArgs()); err == nil {
+				return nil
+			} else {
+				nativeErr = err
+			}
+		}
+
 		streamURL, ffmpegErr := startDetachedFFmpegHLSBridge(requestContext)
 		if ffmpegErr == nil {
 			return p.Play(streamURL)
 		}
-
-		proxiedURL, proxyErr := startDetachedHLSProxy(requestContext)
-		if proxyErr != nil {
-			return fmt.Errorf("启动 ffmpeg 桥接失败: %v；启动本地 HLS 代理失败: %w", ffmpegErr, proxyErr)
+		if nativeErr != nil {
+			return fmt.Errorf("启动本地 HLS 代理失败: %v；mpv 原生播放失败: %v；启动 ffmpeg 桥接失败: %w", proxyErr, nativeErr, ffmpegErr)
 		}
-		return p.Play(proxiedURL)
+		return fmt.Errorf("启动本地 HLS 代理失败: %v；启动 ffmpeg 桥接失败: %w", proxyErr, ffmpegErr)
 	}
 
 	return p.Play(requestContext.SourceURL)
