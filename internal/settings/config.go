@@ -72,6 +72,15 @@ func GetSourceCachePath() (string, error) {
 	return filepath.Join(configDir, "sources_cache.json"), nil
 }
 
+// GetSourcePreferencesPath 获取片源渠道偏好路径
+func GetSourcePreferencesPath() (string, error) {
+	configDir, err := getConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(configDir, "source_preferences.json"), nil
+}
+
 func getConfigDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -30,6 +31,7 @@ type resolvedEpisodeCandidate struct {
 	videoURL   string
 	format     string
 	quality    string
+	priority   int
 	err        error
 }
 
@@ -84,12 +86,13 @@ func resolveEpisodeCandidates(application *app.App, group source.EpisodeGroup) [
 }
 
 func resolveEpisodeCandidate(application *app.App, name string, candidate source.EpisodeCandidate) resolvedEpisodeCandidate {
+	sourceName := strings.TrimSpace(candidate.SourceName)
 	item := resolvedEpisodeCandidate{
 		name:       name,
 		episodeURL: candidate.URL,
+		priority:   application.SourceManager.GetChannelPriorityByName(sourceName),
 	}
 
-	sourceName := strings.TrimSpace(candidate.SourceName)
 	if sourceName == "" {
 		item.err = fmt.Errorf("当前线路缺少片源信息")
 		return item
@@ -126,6 +129,10 @@ func resolveEpisodeCandidate(application *app.App, name string, candidate source
 }
 
 func buildLineSelectionItems(items []resolvedEpisodeCandidate) []tui.LineSelectionItem {
+	sort.SliceStable(items, func(i, j int) bool {
+		return lineSelectionPriority(items[i]) < lineSelectionPriority(items[j])
+	})
+
 	result := make([]tui.LineSelectionItem, 0, len(items))
 	for _, item := range items {
 		entry := tui.LineSelectionItem{
@@ -141,6 +148,13 @@ func buildLineSelectionItems(items []resolvedEpisodeCandidate) []tui.LineSelecti
 		result = append(result, entry)
 	}
 	return result
+}
+
+func lineSelectionPriority(item resolvedEpisodeCandidate) int {
+	if item.err == nil && strings.TrimSpace(item.videoURL) != "" {
+		return -item.priority
+	}
+	return 1000000 - item.priority
 }
 
 func detectMediaFormat(rawURL string) string {

@@ -6,8 +6,8 @@
 
 - 搜索动漫
 - 进入 TUI 完成搜索、番剧筛选、选集、线路选择和播放
-- 管理播放器配置和片源订阅
-- 通过 `config.json` 统一保存配置
+- 管理播放器配置、片源订阅和片源渠道开关
+- 通过 `config.json` 和 `source_preferences.json` 保存配置
 - 为 `PotPlayer + m3u8` 提供本地代理兼容层
 
 ## 推荐开始方式
@@ -25,6 +25,7 @@ goani tui
 goani search 葬送的芙莉莲
 goani play 葬送的芙莉莲
 goani source list
+goani source doctor
 ```
 
 ## 文档

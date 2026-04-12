@@ -3,6 +3,7 @@ package console
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 
@@ -186,5 +187,14 @@ func successResults(results []app.SourceSearchResult) []app.SourceSearchResult {
 			success = append(success, r)
 		}
 	}
+	sort.SliceStable(success, func(i, j int) bool {
+		if success[i].SourcePriority != success[j].SourcePriority {
+			return success[i].SourcePriority > success[j].SourcePriority
+		}
+		if success[i].Duration != success[j].Duration {
+			return success[i].Duration < success[j].Duration
+		}
+		return success[i].SourceName < success[j].SourceName
+	})
 	return success
 }

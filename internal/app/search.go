@@ -21,16 +21,17 @@ const (
 
 // SourceSearchResult 单个源的搜索结果
 type SourceSearchResult struct {
-	SourceName string
-	Status     SearchStatus
-	Duration   time.Duration
-	Results    []source.Anime
-	Error      error
+	SourceName     string
+	SourcePriority int
+	Status         SearchStatus
+	Duration       time.Duration
+	Results        []source.Anime
+	Error          error
 }
 
 // SearchAll 并发搜索所有源
 func (a *App) SearchAll(keyword string) <-chan SourceSearchResult {
-	sources := a.SourceManager.GetAll()
+	sources := a.SourceManager.GetEnabled()
 	resultChan := make(chan SourceSearchResult, len(sources))
 
 	for i := range sources {
@@ -42,8 +43,9 @@ func (a *App) SearchAll(keyword string) <-chan SourceSearchResult {
 			duration := time.Since(start)
 
 			result := SourceSearchResult{
-				SourceName: ms.Arguments.Name,
-				Duration:   duration,
+				SourceName:     ms.Arguments.Name,
+				SourcePriority: a.SourceManager.GetChannelPriorityByName(ms.Arguments.Name),
+				Duration:       duration,
 			}
 
 			if err != nil {

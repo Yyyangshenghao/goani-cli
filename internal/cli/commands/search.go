@@ -56,9 +56,9 @@ func (c *SearchCommand) Run(args []string) {
 }
 
 func (c *SearchCommand) runClassicSearch(application *app.App, keyword string) {
-	totalSources := application.SourceManager.Count()
+	totalSources := application.SourceManager.EnabledCount()
 	if totalSources == 0 {
-		consoleui.Error("未找到媒体源")
+		consoleui.Error("未找到启用中的媒体源，请先在片源渠道配置里开启至少一个源")
 		os.Exit(1)
 	}
 
@@ -147,8 +147,8 @@ func (c *SearchCommand) runInteractiveSearch(application *app.App, keyword strin
 // runInteractiveSearchWithError 保留在命令层，负责 TUI 能力判断和 classic fallback；
 // 真正的交互流程已经下沉到 workflow 包。
 func (c *SearchCommand) runInteractiveSearchWithError(application *app.App, keyword string) error {
-	if application.SourceManager.Count() == 0 {
-		return fmt.Errorf("未找到媒体源")
+	if application.SourceManager.EnabledCount() == 0 {
+		return fmt.Errorf("未找到启用中的媒体源，请先在片源渠道配置里开启至少一个源")
 	}
 
 	if !tui.SupportsInteractiveTUI() {

@@ -5,7 +5,7 @@
 - `goani` 默认显示帮助，不会直接进入 TUI。
 - `goani tui` 是推荐的交互入口。
 - `goani search` 和 `goani play` 继续保留，适合熟悉 CLI 的用户。
-- 所有配置最终都写进 `config.json`。
+- 播放器和订阅写进 `config.json`，片源渠道开关、doctor 诊断结果和优先级写进 `source_preferences.json`。
 
 ---
 
@@ -43,6 +43,7 @@ goani <command> [arguments]
 6. 播放成功后进入播放页，查看当前播放器和线路，并决定返回到哪一层；如果当前番剧还有相邻剧集，也可以直接跳到上一集或下一集。
 
 配置页和媒体源页不在这条搜索链路里，它们是从首页单独进入的。
+如果默认 JSON 订阅里渠道太多，也可以先跑一次 `goani source doctor`，再到 `配置 -> 片源渠道` 里微调开关。
 
 常用操作：
 
@@ -171,6 +172,25 @@ goani play 葬送的芙莉莲
 goani source list
 ```
 
+### 运行媒体源 doctor
+
+```bash
+goani source doctor
+```
+
+示例：
+
+```bash
+goani source doctor
+```
+
+说明：
+
+- `doctor` 会固定用 5 个动漫样本执行“搜索 -> 剧集 -> 视频直链”诊断，像测速一样批量评估当前所有渠道。
+- 完全拿不到视频直链的渠道会被自动关闭。
+- 成功样本越多、平均耗时越低的渠道，优先级越高；后续搜索和线路展示会优先把它们排前面。
+- 结果会写进 `source_preferences.json`，之后在 TUI 的 `配置 -> 片源渠道` 页面也能直接看到。
+
 ### 订阅新的媒体源
 
 ```bash
@@ -225,12 +245,19 @@ goani version
 
 - Windows: `%USERPROFILE%\.goani\config.json`
 - macOS/Linux: `~/.goani/config.json`
+- Windows: `%USERPROFILE%\.goani\source_preferences.json`
+- macOS/Linux: `~/.goani/source_preferences.json`
 
 `config.json` 里保存三类内容：
 
 - 播放器路径
 - 默认播放器
 - 片源订阅
+
+`source_preferences.json` 里保存两类内容：
+
+- 每个片源渠道的启用/禁用状态
+- 最近一次 doctor 诊断结果和自动生成的优先级
 
 同目录下还有一个缓存文件：
 
@@ -241,7 +268,7 @@ goani version
 
 ### 直接打开配置文件
 
-在 TUI 里进入 `配置`，再选择 `打开 config.json`，可以直接用系统默认编辑器打开配置文件。
+在 TUI 里进入 `配置`，再选择 `打开 config.json` 或 `打开 source_preferences.json`，可以直接用系统默认编辑器打开对应文件。
 
 如果你习惯直接编辑 JSON，也可以手动修改后再运行 `goani source refresh` 或重新启动程序。
 

@@ -3,6 +3,7 @@ package workflow
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/Yyyangshenghao/goani-cli/internal/app"
@@ -49,7 +50,8 @@ func PlayEpisodeGroupCLI(application *app.App, src *webselector.WebSelectorSourc
 	}
 
 	var attempts []string
-	for i, candidate := range group.Candidates {
+	candidates := sortedCandidatesByPriority(application, group.Candidates)
+	for i, candidate := range candidates {
 		videoURL, err := src.GetVideoURL(candidate.URL)
 		label := episodeCandidateLabel(group, i, candidate)
 		if err != nil {
@@ -66,6 +68,20 @@ func PlayEpisodeGroupCLI(application *app.App, src *webselector.WebSelectorSourc
 	}
 
 	return fmt.Errorf("这一集的所有线路都失败了:\n%s", strings.Join(attempts, "\n"))
+}
+
+func sortedCandidatesByPriority(application *app.App, candidates []source.EpisodeCandidate) []source.EpisodeCandidate {
+	sorted := make([]source.EpisodeCandidate, len(candidates))
+	copy(sorted, candidates)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		leftPriority := application.SourceManager.GetChannelPriorityByName(sorted[i].SourceName)
+		rightPriority := application.SourceManager.GetChannelPriorityByName(sorted[j].SourceName)
+		if leftPriority != rightPriority {
+			return leftPriority > rightPriority
+		}
+		return sorted[i].SourceName < sorted[j].SourceName
+	})
+	return sorted
 }
 
 func showEpisodesAndSelectWithSource(application *app.App, src *webselector.WebSelectorSource, animeURL string) {

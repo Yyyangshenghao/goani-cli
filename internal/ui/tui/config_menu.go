@@ -13,7 +13,9 @@ type ConfigMenuAction string
 const (
 	ConfigMenuActionPlayers       ConfigMenuAction = "players"
 	ConfigMenuActionSubscriptions ConfigMenuAction = "subscriptions"
+	ConfigMenuActionSourceChannel ConfigMenuAction = "source_channel"
 	ConfigMenuActionOpenConfig    ConfigMenuAction = "open_config"
+	ConfigMenuActionOpenSourceCfg ConfigMenuAction = "open_source_cfg"
 	ConfigMenuActionBack          ConfigMenuAction = "back"
 )
 
@@ -63,9 +65,19 @@ func newConfigMenuModel() configMenuModel {
 				action:      ConfigMenuActionSubscriptions,
 			},
 			{
+				title:       "片源渠道",
+				description: "按渠道开关媒体源，并查看最近一次 doctor 结果",
+				action:      ConfigMenuActionSourceChannel,
+			},
+			{
 				title:       "打开 config.json",
 				description: "用系统默认编辑器打开配置文件",
 				action:      ConfigMenuActionOpenConfig,
+			},
+			{
+				title:       "打开 source_preferences.json",
+				description: "打开片源渠道偏好文件，直接编辑启用状态和 doctor 结果",
+				action:      ConfigMenuActionOpenSourceCfg,
 			},
 			{
 				title:       "返回",

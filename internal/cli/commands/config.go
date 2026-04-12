@@ -102,6 +102,10 @@ func (c *ConfigCommand) Usage() string {
 	if err != nil {
 		configPath = "~/.goani/config.json（Windows 下一般是 %USERPROFILE%\\.goani\\config.json）"
 	}
+	sourcePreferencePath, prefErr := settings.GetSourcePreferencesPath()
+	if prefErr != nil {
+		sourcePreferencePath = "~/.goani/source_preferences.json（Windows 下一般是 %USERPROFILE%\\.goani\\source_preferences.json）"
+	}
 
 	return fmt.Sprintf(`用法:
   goani config player <name> <path>
@@ -110,6 +114,7 @@ func (c *ConfigCommand) Usage() string {
 说明:
   也可以直接编辑配置文件 JSON
   当前配置文件: %s
+  片源渠道偏好: %s
 
 JSON 结构示例:
   {
@@ -134,5 +139,5 @@ JSON 结构示例:
   Windows:   goani config player mpv "D:\MPV播放器\mpv.exe"
   设置默认:   goani config player default mpv
   macOS:     goani config player iina "/Applications/IINA.app/Contents/MacOS/iina-cli"
-  Linux:     goani config player mpv "/usr/bin/mpv"`, configPath)
+  Linux:     goani config player mpv "/usr/bin/mpv"`, configPath, sourcePreferencePath)
 }

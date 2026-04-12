@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
 	"sort"
@@ -10,6 +11,7 @@ import (
 	"github.com/Yyyangshenghao/goani-cli/internal/app"
 	"github.com/Yyyangshenghao/goani-cli/internal/player"
 	"github.com/Yyyangshenghao/goani-cli/internal/settings"
+	"github.com/Yyyangshenghao/goani-cli/internal/source"
 	tui "github.com/Yyyangshenghao/goani-cli/internal/ui/tui"
 )
 
@@ -30,6 +32,10 @@ func RunConfigTUI(application *app.App) error {
 			if err := runSubscriptionConfigTUI(application); err != nil {
 				return err
 			}
+		case tui.ConfigMenuActionSourceChannel:
+			if err := runSourceChannelConfigTUI(application); err != nil {
+				return err
+			}
 		case tui.ConfigMenuActionOpenConfig:
 			if err := openConfigInDefaultEditor(application); err != nil {
 				if pageErr := tui.RunTextTUI("打开配置失败", err.Error()); pageErr != nil {
@@ -45,6 +51,18 @@ func RunConfigTUI(application *app.App) error {
 			if err := tui.RunTextTUI("已打开配置文件", fmt.Sprintf("已尝试用系统默认编辑器打开:\n%s\n\n如果没有弹出编辑器，请检查系统对 .json 文件的默认打开方式。", configPath)); err != nil {
 				return err
 			}
+		case tui.ConfigMenuActionOpenSourceCfg:
+			if err := openSourcePreferencesInDefaultEditor(); err != nil {
+				if pageErr := tui.RunTextTUI("打开片源渠道文件失败", err.Error()); pageErr != nil {
+					return fmt.Errorf("%w；另外打开失败页面也出错: %v", err, pageErr)
+				}
+				continue
+			}
+
+			preferencePath := source.GetPreferencesPath()
+			if err := tui.RunTextTUI("已打开片源渠道文件", fmt.Sprintf("已尝试用系统默认编辑器打开:\n%s\n\n如果没有弹出编辑器，请检查系统对 .json 文件的默认打开方式。", preferencePath)); err != nil {
+				return err
+			}
 		case tui.ConfigMenuActionBack:
 			return nil
 		default:
@@ -57,15 +75,26 @@ func RunConfigTUI(application *app.App) error {
 func RenderSourceOverview(application *app.App) string {
 	var b strings.Builder
 
-	sources := application.SourceManager.GetAll()
+	channels := application.SourceManager.ListChannels()
 	subs := application.SourceManager.GetSubscriptions()
 
-	b.WriteString(fmt.Sprintf("已加载媒体源: %d\n", len(sources)))
+	b.WriteString(fmt.Sprintf("已加载媒体源: %d\n", len(channels)))
+	b.WriteString(fmt.Sprintf("当前启用渠道: %d\n", application.SourceManager.EnabledCount()))
+	b.WriteString(fmt.Sprintf("渠道偏好文件: %s\n", source.GetPreferencesPath()))
 	b.WriteString("\n")
-	for i, s := range sources {
-		b.WriteString(fmt.Sprintf("%d. %s\n", i+1, s.Arguments.Name))
-		if strings.TrimSpace(s.Arguments.Description) != "" {
-			b.WriteString(fmt.Sprintf("   %s\n", s.Arguments.Description))
+	for i, item := range channels {
+		b.WriteString(fmt.Sprintf("%d. [%s] %s\n", i+1, renderChannelEnabled(item.Enabled), item.Name))
+		if strings.TrimSpace(item.Description) != "" {
+			b.WriteString(fmt.Sprintf("   %s\n", item.Description))
+		}
+		if item.Priority > 0 {
+			b.WriteString(fmt.Sprintf("   优先级: %d\n", item.Priority))
+		}
+		if item.LastDoctor != nil {
+			b.WriteString(fmt.Sprintf("   最近诊断: %d/%d 成功 (%s)\n", item.LastDoctor.SuccessfulRuns, item.LastDoctor.TotalRuns, item.LastDoctor.CheckedAt))
+			if strings.TrimSpace(item.LastDoctor.Summary) != "" {
+				b.WriteString(fmt.Sprintf("   结果说明: %s\n", item.LastDoctor.Summary))
+			}
 		}
 	}
 
@@ -153,6 +182,30 @@ func runSubscriptionConfigTUI(application *app.App) error {
 	)
 }
 
+func runSourceChannelConfigTUI(application *app.App) error {
+	return tui.RunSourceChannelConfigTUI(
+		buildSourceChannelPageState(application),
+		func(id string, enabled bool) (tui.SourceChannelPageState, error) {
+			if err := application.SourceManager.SetChannelEnabled(id, enabled); err != nil {
+				return tui.SourceChannelPageState{}, err
+			}
+			return buildSourceChannelPageState(application), nil
+		},
+		func() (tui.SourceChannelPageState, error) {
+			if err := application.SourceManager.SetAllChannelsEnabled(true); err != nil {
+				return tui.SourceChannelPageState{}, err
+			}
+			return buildSourceChannelPageState(application), nil
+		},
+		func() (tui.SourceChannelPageState, error) {
+			if _, err := application.SourceManager.EnableLastWorkingChannels(); err != nil {
+				return tui.SourceChannelPageState{}, err
+			}
+			return buildSourceChannelPageState(application), nil
+		},
+	)
+}
+
 func buildPlayerConfigPageState(application *app.App) tui.PlayerConfigPageState {
 	configPath, err := settings.GetConfigPath()
 	if err != nil {
@@ -220,19 +273,71 @@ func openConfigInDefaultEditor(application *app.App) error {
 		return fmt.Errorf("获取配置文件路径失败: %w", err)
 	}
 
+	return openJSONInDefaultEditor(configPath)
+}
+
+func openSourcePreferencesInDefaultEditor() error {
+	preferencePath, err := settings.GetSourcePreferencesPath()
+	if err != nil {
+		return fmt.Errorf("获取片源渠道文件路径失败: %w", err)
+	}
+
+	if _, statErr := os.Stat(preferencePath); statErr != nil {
+		if os.IsNotExist(statErr) {
+			if writeErr := os.WriteFile(preferencePath, []byte("{\n  \"sources\": []\n}\n"), 0644); writeErr != nil {
+				return fmt.Errorf("创建片源渠道文件失败: %w", writeErr)
+			}
+		} else {
+			return fmt.Errorf("检查片源渠道文件失败: %w", statErr)
+		}
+	}
+
+	return openJSONInDefaultEditor(preferencePath)
+}
+
+func buildSourceChannelPageState(application *app.App) tui.SourceChannelPageState {
+	items := application.SourceManager.ListChannels()
+	stateItems := make([]tui.SourceChannelPageItem, 0, len(items))
+	for _, item := range items {
+		stateItems = append(stateItems, tui.SourceChannelPageItem{
+			ID:          item.ID,
+			Name:        item.Name,
+			Description: item.Description,
+			Enabled:     item.Enabled,
+			Priority:    item.Priority,
+			LastDoctor:  item.LastDoctor,
+		})
+	}
+
+	return tui.SourceChannelPageState{
+		ConfigPath:   source.GetPreferencesPath(),
+		TotalCount:   len(stateItems),
+		EnabledCount: application.SourceManager.EnabledCount(),
+		Items:        stateItems,
+	}
+}
+
+func openJSONInDefaultEditor(path string) error {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		cmd = exec.Command("cmd", "/c", "start", "", configPath)
+		cmd = exec.Command("cmd", "/c", "start", "", path)
 	case "darwin":
-		cmd = exec.Command("open", configPath)
+		cmd = exec.Command("open", path)
 	default:
-		cmd = exec.Command("xdg-open", configPath)
+		cmd = exec.Command("xdg-open", path)
 	}
 
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("打开配置文件失败: %w", err)
+		return fmt.Errorf("打开文件失败: %w", err)
 	}
 
 	return nil
+}
+
+func renderChannelEnabled(enabled bool) string {
+	if enabled {
+		return "开"
+	}
+	return "关"
 }

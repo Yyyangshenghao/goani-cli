@@ -64,7 +64,7 @@ func newMainTUIModel() mainTUIModel {
 			},
 			{
 				title:       "配置",
-				description: "查看播放器、订阅源，并可直接打开 config.json",
+				description: "查看播放器、订阅源、片源渠道，并可直接打开配置文件",
 				action:      MainMenuActionConfig,
 			},
 			{

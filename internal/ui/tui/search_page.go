@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -106,7 +107,7 @@ func newSearchTUIModel(application *app.App, initialKeyword string) searchTUIMod
 		app:          application,
 		input:        input,
 		spinner:      spin,
-		totalSources: application.SourceManager.Count(),
+		totalSources: application.SourceManager.EnabledCount(),
 		selected:     0,
 	}
 }
@@ -132,12 +133,19 @@ func (m searchTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.selection = nil
 			return m, tea.Quit
 		case "up", "k":
+			aggregated := aggregatedSearchResults(m.results)
+			if len(aggregated) > 0 {
+				m.input.Blur()
+			}
 			if m.selected > 0 {
 				m.selected--
 			}
 			return m, nil
 		case "down", "j":
 			aggregated := aggregatedSearchResults(m.results)
+			if len(aggregated) > 0 {
+				m.input.Blur()
+			}
 			if m.selected < len(aggregated)-1 {
 				m.selected++
 			}
@@ -154,9 +162,15 @@ func (m searchTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 
+		var cmds []tea.Cmd
+		if !m.input.Focused() {
+			cmds = append(cmds, m.input.Focus())
+		}
+
 		var cmd tea.Cmd
 		before := m.input.Value()
 		m.input, cmd = m.input.Update(msg)
+		cmds = append(cmds, cmd)
 		after := m.input.Value()
 		if before != after {
 			m.requestID++
@@ -166,11 +180,12 @@ func (m searchTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.results = nil
 				m.completed = 0
 				m.searching = false
-				return m, cmd
+				return m, tea.Batch(cmds...)
 			}
-			return m, tea.Batch(cmd, debounceSearchCmd(m.requestID, after))
+			cmds = append(cmds, debounceSearchCmd(m.requestID, after))
+			return m, tea.Batch(cmds...)
 		}
-		return m, cmd
+		return m, tea.Batch(cmds...)
 
 	case searchDebounceMsg:
 		if msg.requestID != m.requestID {
@@ -256,13 +271,26 @@ func (m searchTUIModel) View() string {
 	b.WriteString("\n")
 	b.WriteString(tuiTitleStyle.Render("聚合番剧"))
 	b.WriteString("\n")
-	for i, item := range aggregated {
+
+	start, end := m.visibleResultRange(len(aggregated))
+	if start > 0 {
+		b.WriteString(tuiMutedStyle.Render(fmt.Sprintf("... 上方还有 %d 项", start)))
+		b.WriteString("\n")
+	}
+
+	for i := start; i < end; i++ {
+		item := aggregated[i]
 		line := fmt.Sprintf("%s  %s  [%d 个片源 / %d 条命中]", pointer(i == m.selected), item.Name, item.SourceCount(), item.HitCount())
 		if i == m.selected {
 			b.WriteString(tuiPickStyle.Render(line))
 		} else {
 			b.WriteString(line)
 		}
+		b.WriteString("\n")
+	}
+
+	if end < len(aggregated) {
+		b.WriteString(tuiMutedStyle.Render(fmt.Sprintf("... 下方还有 %d 项", len(aggregated)-end)))
 		b.WriteString("\n")
 	}
 
@@ -314,6 +342,15 @@ func successSearchResults(results []app.SourceSearchResult) []app.SourceSearchRe
 			success = append(success, item)
 		}
 	}
+	sort.SliceStable(success, func(i, j int) bool {
+		if success[i].SourcePriority != success[j].SourcePriority {
+			return success[i].SourcePriority > success[j].SourcePriority
+		}
+		if success[i].Duration != success[j].Duration {
+			return success[i].Duration < success[j].Duration
+		}
+		return success[i].SourceName < success[j].SourceName
+	})
 	return success
 }
 
@@ -329,6 +366,44 @@ func aggregatedSearchResults(results []app.SourceSearchResult) []source.Aggregat
 		}
 	}
 	return source.GroupAnimes(hits)
+}
+
+func (m searchTUIModel) visibleResultRange(total int) (int, int) {
+	if total <= 0 {
+		return 0, 0
+	}
+
+	page := m.resultPageSize()
+	start := m.selected - page/2
+	if start < 0 {
+		start = 0
+	}
+
+	end := start + page
+	if end > total {
+		end = total
+		start = end - page
+		if start < 0 {
+			start = 0
+		}
+	}
+
+	return start, end
+}
+
+func (m searchTUIModel) resultPageSize() int {
+	if m.height <= 0 {
+		return 5
+	}
+
+	page := m.height - 9
+	if page < 1 {
+		page = 1
+	}
+	if page > 10 {
+		page = 10
+	}
+	return page
 }
 
 func pointer(selected bool) string {
