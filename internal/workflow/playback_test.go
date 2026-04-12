@@ -1,8 +1,10 @@
 package workflow
 
 import (
+	"errors"
 	"testing"
 
+	"github.com/Yyyangshenghao/goani-cli/internal/player"
 	"github.com/Yyyangshenghao/goani-cli/internal/source"
 	tui "github.com/Yyyangshenghao/goani-cli/internal/ui/tui"
 )
@@ -134,4 +136,80 @@ func TestEpisodeCandidateLabel(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPlayWithRequestContextPrefersFFmpegBridgeForM3U8(t *testing.T) {
+	oldFFmpeg := startDetachedFFmpegHLSBridge
+	oldProxy := startDetachedHLSProxy
+	t.Cleanup(func() {
+		startDetachedFFmpegHLSBridge = oldFFmpeg
+		startDetachedHLSProxy = oldProxy
+	})
+
+	startDetachedFFmpegHLSBridge = func(ctx player.StreamRequestContext) (string, error) {
+		if ctx.SourceURL != "https://media.example.com/master.m3u8" {
+			t.Fatalf("unexpected source url: got %q", ctx.SourceURL)
+		}
+		return "http://127.0.0.1:9000/live.ts", nil
+	}
+	startDetachedHLSProxy = func(ctx player.StreamRequestContext) (string, error) {
+		t.Fatalf("proxy should not be used when ffmpeg bridge succeeds")
+		return "", nil
+	}
+
+	p := &fakePlaybackPlayer{}
+	err := playWithRequestContext(p, player.StreamRequestContext{
+		SourceURL: "https://media.example.com/master.m3u8",
+	})
+	if err != nil {
+		t.Fatalf("playWithRequestContext returned error: %v", err)
+	}
+	if len(p.played) != 1 || p.played[0] != "http://127.0.0.1:9000/live.ts" {
+		t.Fatalf("unexpected played urls: %v", p.played)
+	}
+}
+
+func TestPlayWithRequestContextFallsBackToProxyWhenFFmpegFails(t *testing.T) {
+	oldFFmpeg := startDetachedFFmpegHLSBridge
+	oldProxy := startDetachedHLSProxy
+	t.Cleanup(func() {
+		startDetachedFFmpegHLSBridge = oldFFmpeg
+		startDetachedHLSProxy = oldProxy
+	})
+
+	startDetachedFFmpegHLSBridge = func(ctx player.StreamRequestContext) (string, error) {
+		return "", errors.New("ffmpeg unavailable")
+	}
+	startDetachedHLSProxy = func(ctx player.StreamRequestContext) (string, error) {
+		return "http://127.0.0.1:9001/master.m3u8", nil
+	}
+
+	p := &fakePlaybackPlayer{}
+	err := playWithRequestContext(p, player.StreamRequestContext{
+		SourceURL: "https://media.example.com/master.m3u8",
+	})
+	if err != nil {
+		t.Fatalf("playWithRequestContext returned error: %v", err)
+	}
+	if len(p.played) != 1 || p.played[0] != "http://127.0.0.1:9001/master.m3u8" {
+		t.Fatalf("unexpected played urls: %v", p.played)
+	}
+}
+
+type fakePlaybackPlayer struct {
+	played []string
+}
+
+func (p *fakePlaybackPlayer) Name() string {
+	return "fake"
+}
+
+func (p *fakePlaybackPlayer) Play(url string) error {
+	p.played = append(p.played, url)
+	return nil
+}
+
+func (p *fakePlaybackPlayer) PlayWithArgs(url string, args []string) error {
+	p.played = append(p.played, url)
+	return nil
 }

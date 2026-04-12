@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Yyyangshenghao/goani-cli/internal/app"
 	"github.com/Yyyangshenghao/goani-cli/internal/player"
 	"github.com/Yyyangshenghao/goani-cli/internal/source"
 	consoleui "github.com/Yyyangshenghao/goani-cli/internal/ui/console"
@@ -11,6 +12,9 @@ import (
 )
 
 const playbackUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+var startDetachedFFmpegHLSBridge = player.StartDetachedFFmpegHLSBridge
+var startDetachedHLSProxy = player.StartDetachedHLSProxy
 
 type playbackLaunchResult struct {
 	playerName   string
@@ -86,20 +90,66 @@ func resolvePlaybackNavigation(action tui.PlaybackAction, currentEpisodeIndex, t
 	return result
 }
 
-// playWithRequestContext 会根据播放器和线路格式决定是否启用兼容层。
-// 目前主要是 PotPlayer 播放受保护的 m3u8 时，通过本地 HLS 代理兜底。
+// playWithRequestContext 会根据线路格式决定是否启用兼容层。
+// 很多站点的 m3u8/分片请求依赖 Referer、User-Agent、Cookie 或额外请求头，
+// 所以这里会优先交给 ffmpeg 拉流，再回退到本地 HLS 代理兜底。
 func playWithRequestContext(p interface {
 	Name() string
 	Play(string) error
 	PlayWithArgs(string, []string) error
-}, videoURL, referer string) error {
-	if p.Name() == "potplayer" && detectMediaFormat(videoURL) == "m3u8" {
-		proxiedURL, err := player.StartDetachedHLSProxy(videoURL, referer, playbackUserAgent)
-		if err != nil {
-			return fmt.Errorf("启动本地 HLS 代理失败: %w", err)
+}, requestContext player.StreamRequestContext) error {
+	requestContext = requestContext.Normalized()
+	if detectMediaFormat(requestContext.SourceURL) == "m3u8" {
+		streamURL, ffmpegErr := startDetachedFFmpegHLSBridge(requestContext)
+		if ffmpegErr == nil {
+			return p.Play(streamURL)
+		}
+
+		proxiedURL, proxyErr := startDetachedHLSProxy(requestContext)
+		if proxyErr != nil {
+			return fmt.Errorf("启动 ffmpeg 桥接失败: %v；启动本地 HLS 代理失败: %w", ffmpegErr, proxyErr)
 		}
 		return p.Play(proxiedURL)
 	}
 
-	return p.Play(videoURL)
+	return p.Play(requestContext.SourceURL)
+}
+
+func buildPlaybackRequestContext(application *app.App, sourceName, videoURL, referer string) player.StreamRequestContext {
+	ctx := player.StreamRequestContext{
+		SourceURL: videoURL,
+		Referer:   referer,
+		UserAgent: playbackUserAgent,
+	}
+
+	sourceName = strings.TrimSpace(sourceName)
+	if sourceName == "" {
+		return ctx
+	}
+
+	rawSource := application.SourceManager.GetByName(sourceName)
+	if rawSource == nil {
+		return ctx
+	}
+
+	matchVideo := rawSource.Arguments.SearchConfig.MatchVideo
+	if strings.TrimSpace(matchVideo.Cookies) != "" {
+		ctx.Cookies = strings.TrimSpace(matchVideo.Cookies)
+	}
+	if len(matchVideo.AddHeadersToVideo) > 0 {
+		ctx.Headers = cloneStringMap(matchVideo.AddHeadersToVideo)
+	}
+	return ctx
+}
+
+func cloneStringMap(input map[string]string) map[string]string {
+	if len(input) == 0 {
+		return nil
+	}
+
+	cloned := make(map[string]string, len(input))
+	for key, value := range input {
+		cloned[key] = value
+	}
+	return cloned
 }

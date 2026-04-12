@@ -59,7 +59,8 @@ func PlayEpisodeGroupCLI(application *app.App, src *webselector.WebSelectorSourc
 			continue
 		}
 		consoleui.Info("使用 %s 播放 %s...", p.Name(), label)
-		if err := playWithRequestContext(p, videoURL, candidate.URL); err != nil {
+		requestContext := buildPlaybackRequestContext(application, firstNonEmpty(candidate.SourceName, src.Name()), videoURL, candidate.URL)
+		if err := playWithRequestContext(p, requestContext); err != nil {
 			attempts = append(attempts, fmt.Sprintf("%s 播放失败: %v", label, err))
 			continue
 		}
@@ -68,6 +69,15 @@ func PlayEpisodeGroupCLI(application *app.App, src *webselector.WebSelectorSourc
 	}
 
 	return fmt.Errorf("这一集的所有线路都失败了:\n%s", strings.Join(attempts, "\n"))
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func sortedCandidatesByPriority(application *app.App, candidates []source.EpisodeCandidate) []source.EpisodeCandidate {

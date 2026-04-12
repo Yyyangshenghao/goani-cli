@@ -25,3 +25,4 @@ Thumbs.db
 
 # Config (user specific)
 goani.json
+internal/player/testdata/*.local.json

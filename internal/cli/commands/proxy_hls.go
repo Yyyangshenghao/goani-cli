@@ -23,7 +23,7 @@ func (c *ProxyHLSCommand) ShortDesc() string {
 }
 
 func (c *ProxyHLSCommand) Usage() string {
-	return "用法: goani proxy-hls <source-url> [referer] [user-agent]"
+	return "用法: goani proxy-hls <encoded-stream-context>"
 }
 
 func (c *ProxyHLSCommand) Hidden() bool {
@@ -36,17 +36,20 @@ func (c *ProxyHLSCommand) Run(args []string) {
 		os.Exit(1)
 	}
 
-	sourceURL := args[0]
-	referer := ""
-	userAgent := ""
-	if len(args) > 1 {
-		referer = args[1]
-	}
-	if len(args) > 2 {
-		userAgent = args[2]
+	ctx, err := player.DecodeStreamRequestContext(args[0])
+	if err != nil {
+		ctx = player.StreamRequestContext{
+			SourceURL: args[0],
+		}
+		if len(args) > 1 {
+			ctx.Referer = args[1]
+		}
+		if len(args) > 2 {
+			ctx.UserAgent = args[2]
+		}
 	}
 
-	if err := player.ServeHLSProxy(sourceURL, referer, userAgent, os.Stdout); err != nil {
+	if err := player.ServeHLSProxy(ctx, os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

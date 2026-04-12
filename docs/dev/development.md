@@ -178,9 +178,41 @@ CI 会在 push / pull request 上自动执行：
 go run .\cmd\goani-debug-source
 go run .\cmd\goani-debug-player
 go run .\cmd\goani-debug-potplayer
+go run .\cmd\goani-debug-playback
 ```
 
 这类程序适合做本地验证、播放器探针和临时排查。后续如果再增加，优先保持“开发工具”定位，不要把它们当成自动测试。
+
+### 本地播放器回归测试
+
+播放器回归现在分成两步：
+
+1. 先采集真实 `m3u8` 样本
+
+```powershell
+go run .\cmd\goani-debug-playback
+```
+
+默认会把样本写到 `internal/player/testdata/m3u8_samples.local.json`。
+
+2. 再跑本地 smoke 或手工播放器矩阵
+
+```powershell
+$env:GOANI_RUN_LIVE_PLAYBACK_SMOKE = "1"
+go test ./internal/player -run TestLivePlaybackSmoke -v
+```
+
+```powershell
+$env:GOANI_RUN_MANUAL_PLAYER_TESTS = "1"
+go test ./internal/player -run TestManualPlayerPlaybackMatrix -v
+```
+
+可选环境变量：
+
+- `GOANI_PLAYBACK_SAMPLE_FILE` 指定自定义样本文件路径
+- `GOANI_PLAYBACK_PLAYERS=mpv,potplayer` 只跑指定播放器
+
+手工播放器矩阵只会测试 `config.json` 里已经明确配置过路径、且当前路径可用的播放器；不会把系统里自动探测到但未配置的播放器带进测试。
 
 ---
 

@@ -27,6 +27,7 @@ const (
 // 它保留了原始剧集页地址、最终视频地址，以及尽力探测出的格式和清晰度。
 type resolvedEpisodeCandidate struct {
 	name       string
+	sourceName string
 	episodeURL string
 	videoURL   string
 	format     string
@@ -89,6 +90,7 @@ func resolveEpisodeCandidate(application *app.App, name string, candidate source
 	sourceName := strings.TrimSpace(candidate.SourceName)
 	item := resolvedEpisodeCandidate{
 		name:       name,
+		sourceName: sourceName,
 		episodeURL: candidate.URL,
 		priority:   application.SourceManager.GetChannelPriorityByName(sourceName),
 	}

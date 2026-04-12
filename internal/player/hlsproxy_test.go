@@ -58,11 +58,15 @@ func TestRewritePlaylistRewritesURIAttributes(t *testing.T) {
 func TestServeUpstreamForwardsHeadersAndRewritesM3U8(t *testing.T) {
 	var gotUserAgent string
 	var gotReferer string
+	var gotCookie string
+	var gotTraceID string
 	var gotRange string
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotUserAgent = r.Header.Get("User-Agent")
 		gotReferer = r.Header.Get("Referer")
+		gotCookie = r.Header.Get("Cookie")
+		gotTraceID = r.Header.Get("X-Trace-ID")
 		gotRange = r.Header.Get("Range")
 		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 		_, _ = io.WriteString(w, "#EXTM3U\nchunk.ts\n")
@@ -75,10 +79,16 @@ func TestServeUpstreamForwardsHeadersAndRewritesM3U8(t *testing.T) {
 	}
 
 	proxy := &hlsProxy{
-		referer:   "https://anime.example.com/watch/1",
-		userAgent: "goani-test-agent",
-		baseURL:   parsedURL,
-		client:    upstream.Client(),
+		requestContext: StreamRequestContext{
+			Referer:   "https://anime.example.com/watch/1",
+			UserAgent: "goani-test-agent",
+			Cookies:   "session=abc123",
+			Headers: map[string]string{
+				"X-Trace-ID": "trace-001",
+			},
+		},
+		baseURL: parsedURL,
+		client:  upstream.Client(),
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/master.m3u8", nil)
@@ -96,6 +106,12 @@ func TestServeUpstreamForwardsHeadersAndRewritesM3U8(t *testing.T) {
 	}
 	if gotReferer != "https://anime.example.com/watch/1" {
 		t.Fatalf("unexpected referer: got %q", gotReferer)
+	}
+	if gotCookie != "session=abc123" {
+		t.Fatalf("unexpected cookie header: got %q", gotCookie)
+	}
+	if gotTraceID != "trace-001" {
+		t.Fatalf("unexpected custom header: got %q", gotTraceID)
 	}
 	if gotRange != "bytes=0-10" {
 		t.Fatalf("unexpected range header: got %q", gotRange)

@@ -137,7 +137,8 @@ func playResolvedEpisodeCandidateTUI(application *app.App, group source.EpisodeG
 	if strings.TrimSpace(candidate.videoURL) == "" {
 		return nil, fmt.Errorf("当前线路没有可播放的视频链接")
 	}
-	if err := playWithRequestContext(p, candidate.videoURL, candidate.episodeURL); err != nil {
+	requestContext := buildPlaybackRequestContext(application, candidate.sourceName, candidate.videoURL, candidate.episodeURL)
+	if err := playWithRequestContext(p, requestContext); err != nil {
 		return nil, fmt.Errorf("%s 播放失败: %w", candidate.name, err)
 	}
 
