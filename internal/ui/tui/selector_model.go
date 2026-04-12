@@ -84,9 +84,8 @@ func (m selectorTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "r":
 			if m.allowReverse {
-				actual := m.displayIndexToActual(m.selected)
 				m.reversed = !m.reversed
-				m.selected = m.actualToDisplayIndex(actual)
+				m.selected = 0
 			}
 			return m, nil
 		case "backspace":
