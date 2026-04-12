@@ -1,0 +1,44 @@
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - gofmt
+    - gci
+    - govet
+    - ineffassign
+    - staticcheck
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: false
+  gci:
+    sections:
+      - standard
+      - default
+      - prefix(github.com/Yyyangshenghao/goani-cli)
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-rules:
+    - path: internal/ui/console/search_live.go
+      linters:
+        - errcheck
+    - path: internal/workflow/line_probe.go
+      text: "SA1006"
+      linters:
+        - staticcheck
+    - path: internal/cli/root.go
+      linters:
+        - gci
+    - path: internal/source/webselector/episode.go
+      linters:
+        - gci
+    - path: internal/source/webselector/search.go
+      linters:
+        - gci

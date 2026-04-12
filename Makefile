@@ -1,7 +1,9 @@
-.PHONY: build clean test run install
+.PHONY: build clean test run install fmt lint lint-fix
 
 BINARY_NAME=goani
 VERSION?=dev
+GOLANGCI_LINT_VERSION?=v1.64.8
+GOLANGCI_LINT=go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 GIT_COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
 
@@ -44,4 +46,8 @@ fmt:
 
 # 静态检查
 lint:
-	go vet ./...
+	$(GOLANGCI_LINT) run
+
+# 自动修复可格式化问题
+lint-fix:
+	$(GOLANGCI_LINT) run --fix

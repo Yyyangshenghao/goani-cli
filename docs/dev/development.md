@@ -59,6 +59,7 @@ goani-cli/
 - 仓库内保留型构建产物统一放在 `bin/`。
 - 临时验证用的二进制建议输出到系统临时目录，例如 Windows 下用 `$env:TEMP`。
 - 不建议在仓库根目录直接生成 `goani` 或 `goani.exe`，避免和源码、文档混在一起。
+- 交给用户手工验证时，默认统一编译到 `bin/goani-test.exe`，避免和 agent 自己的临时验证产物混淆。
 
 ### 本地构建
 
@@ -72,6 +73,27 @@ Windows PowerShell：
 ```powershell
 New-Item -ItemType Directory -Force .\bin | Out-Null
 go build -o .\bin\goani.exe .\cmd\goani
+```
+
+### 手工测试约定
+
+如果是 agent 自己做快速验证，优先编到系统临时目录：
+
+```powershell
+go build -o $env:TEMP\goani-check.exe .\cmd\goani
+```
+
+如果是交给用户在自己的 `pwsh` 窗口里直接测试，统一编到：
+
+```powershell
+New-Item -ItemType Directory -Force .\bin | Out-Null
+go build -o .\bin\goani-test.exe .\cmd\goani
+```
+
+后续默认让用户运行：
+
+```powershell
+.\bin\goani-test.exe
 ```
 
 ### 使用 Makefile
@@ -134,10 +156,16 @@ go test ./...
 go vet ./...
 ```
 
+更完整的 lint 检查：
+
+```bash
+go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8 run
+```
+
 CI 会在 push / pull request 上自动执行：
 
+- `golangci-lint`
 - `go test ./...`
-- `go vet ./...`
 - `go build -o <temp> ./cmd/goani`
 
 ### 手动调试入口
@@ -216,7 +244,7 @@ func init() {
 1. 改动尽量按功能块提交，不要把文档、代码和测试混成一坨。
 2. 复杂逻辑优先补 `*_test.go`，不要只靠 `cmd/goani-debug-*` 里的手动工具。
 3. 注释要解释边界、原因和副作用，不要重复函数名本身。
-4. 改完后至少跑一次 `go build` 和 `go test ./...`。
+4. 改完后至少跑一次 `go test ./...` 和 `go build`；如果改动涉及多个 Go 文件，优先再跑一次 `golangci-lint`。
 
 ---
 
