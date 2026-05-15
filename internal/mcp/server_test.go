@@ -70,12 +70,12 @@ func TestMarshalJSONEpisodeItem(t *testing.T) {
 }
 
 func TestMarshalJSONSourceItem(t *testing.T) {
-	item := sourceItem{Name: "test-source", Description: "desc", Enabled: true}
+	item := sourceItem{ID: "src-1", Name: "test-source", Description: "desc", Enabled: true}
 	data, err := json.Marshal(item)
 	if err != nil {
 		t.Fatalf("json.Marshal(sourceItem) error: %v", err)
 	}
-	want := `{"name":"test-source","description":"desc","enabled":true}`
+	want := `{"id":"src-1","name":"test-source","description":"desc","enabled":true}`
 	if string(data) != want {
 		t.Errorf("json.Marshal(sourceItem) = %s, want %s", data, want)
 	}

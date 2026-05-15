@@ -25,4 +25,7 @@ Thumbs.db
 
 # Config (user specific)
 goani.json
+
+# Superpowers docs
+docs/superpowers/
 internal/player/testdata/*.local.json

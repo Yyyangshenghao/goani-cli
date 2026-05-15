@@ -9,6 +9,7 @@
 - 管理播放器配置、片源订阅和片源渠道开关
 - 通过 `config.json` 和 `source_preferences.json` 保存配置
 - 为各类播放器提供统一的 `m3u8` 本地 HLS 兼容层
+- 通过 MCP 协议与 AI 助手集成（`goani mcp`）
 
 ## 推荐开始方式
 
@@ -27,6 +28,25 @@ goani play 葬送的芙莉莲
 goani source list
 goani source doctor
 ```
+
+## MCP 集成
+
+`goani mcp` 启动 MCP server，让 AI 助手（Claude Code、Copilot 等）直接调用搜索、剧集、视频直链等能力。
+
+Claude Code 配置示例（`.claude/settings.json`）：
+
+```json
+{
+  "mcpServers": {
+    "goani": {
+      "command": "goani",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+可用 tools：`search`、`get_episodes`、`get_video_url`、`list_sources`
 
 ## 文档
 

@@ -142,6 +142,7 @@ type listSourcesOutput struct {
 }
 
 type sourceItem struct {
+	ID          string `json:"id"          jsonschema:"源唯一标识"`
 	Name        string `json:"name"        jsonschema:"源名称"`
 	Description string `json:"description" jsonschema:"源描述"`
 	Enabled     bool   `json:"enabled"     jsonschema:"是否启用"`
@@ -161,6 +162,7 @@ func handleListSources(ctx context.Context, req *mcpgo.CallToolRequest, _ struct
 	items := make([]sourceItem, len(channels))
 	for i, ch := range channels {
 		items[i] = sourceItem{
+			ID:          ch.ID,
 			Name:        ch.Name,
 			Description: ch.Description,
 			Enabled:     ch.Enabled,
